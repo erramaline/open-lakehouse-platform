@@ -1,0 +1,94 @@
+{
+  "expectation_suite_name": "raw_layer",
+  "data_asset_type": "Dataset",
+  "meta": {
+    "great_expectations_version": "0.18.x",
+    "description": "Data quality expectations for raw Iceberg tables (landing zone). Validates structure, nullability, and basic format constraints.",
+    "layer": "raw",
+    "owner": "data-engineers"
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "event_id" },
+      "meta": { "notes": "Primary key must always exist" }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "event_timestamp" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "source_system" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "ingestion_timestamp" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "event_id", "mostly": 1.0 },
+      "meta": { "notes": "No null PKs allowed in raw" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "event_timestamp", "mostly": 0.99 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": { "column": "event_id" },
+      "meta": { "notes": "Raw events must have unique IDs per batch" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "event_id",
+        "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        "mostly": 0.99
+      },
+      "meta": { "notes": "event_id must be a valid UUID v4 format" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "event_timestamp",
+        "min_value": "2020-01-01T00:00:00Z",
+        "max_value": "2100-12-31T23:59:59Z",
+        "mostly": 0.99,
+        "parse_strings_as_datetimes": true
+      },
+      "meta": { "notes": "Timestamps must be in a plausible range" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "source_system",
+        "value_set": ["crm", "erp", "pos", "web", "mobile", "iot", "partner_api", "manual"],
+        "mostly": 0.98
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": { "min_value": 1, "max_value": 50000000 },
+      "meta": { "notes": "Raw table must not be empty and must not exceed 50M rows per batch" }
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": ["event_id", "event_timestamp", "source_system", "ingestion_timestamp", "payload"],
+        "exact_match": false
+      },
+      "meta": { "notes": "Minimum required columns must be present" }
+    },
+    {
+      "expectation_type": "expect_column_proportion_of_unique_values_to_be_between",
+      "kwargs": { "column": "event_id", "min_value": 0.99 },
+      "meta": {}
+    }
+  ]
+}

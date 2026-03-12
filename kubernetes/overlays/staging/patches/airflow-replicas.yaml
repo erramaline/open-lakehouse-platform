@@ -1,0 +1,25 @@
+---
+# Airflow in staging: 1 webserver, 1 scheduler, 1 worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: lakehouse-ingest
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: lakehouse-ingest
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-worker
+  namespace: lakehouse-ingest
+spec:
+  replicas: 1

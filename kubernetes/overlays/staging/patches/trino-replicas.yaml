@@ -1,0 +1,9 @@
+---
+# Trino coordinator: 1 replica in staging
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: lakehouse-data
+spec:
+  replicas: 1

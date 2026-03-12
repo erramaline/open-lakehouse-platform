@@ -1,0 +1,142 @@
+{
+  "expectation_suite_name": "curated_layer",
+  "data_asset_type": "Dataset",
+  "meta": {
+    "great_expectations_version": "0.18.x",
+    "description": "Data quality expectations for curated business mart tables. Validates revenue integrity, aggregation consistency, PII handling, and business rule compliance.",
+    "layer": "curated",
+    "owner": "data-engineers"
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "customer_id" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "total_revenue" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "order_count" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "first_order_date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "last_order_date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "region" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "email" },
+      "meta": { "notes": "PII column — must exist even if masked for certain roles" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "customer_id", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "total_revenue", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "order_count", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": { "column": "customer_id" },
+      "meta": { "notes": "Customer mart is 1 row per customer — no duplicates" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "total_revenue",
+        "min_value": 0.01,
+        "max_value": 999999999.99,
+        "mostly": 0.999
+      },
+      "meta": { "notes": "Revenue must be strictly positive (customers with 0 revenue excluded from mart)" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "order_count",
+        "min_value": 1,
+        "max_value": 100000,
+        "mostly": 1.0
+      },
+      "meta": { "notes": "Every curated customer must have at least one order" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "first_order_date",
+        "min_value": "2015-01-01",
+        "max_value": "2100-12-31",
+        "parse_strings_as_datetimes": true,
+        "mostly": 1.0
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_pair_values_A_to_be_greater_than_B",
+      "kwargs": {
+        "column_A": "last_order_date",
+        "column_B": "first_order_date",
+        "or_equal": true,
+        "ignore_row_if": "either_value_is_missing",
+        "mostly": 1.0
+      },
+      "meta": { "notes": "last_order_date must be >= first_order_date" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "region",
+        "value_set": ["EMEA", "APAC", "AMER", "LATAM", "MENA", "unknown"],
+        "mostly": 0.999
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "email",
+        "regex": "^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$",
+        "mostly": 0.95
+      },
+      "meta": { "notes": "Email format validated where value is not masked/null" }
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": { "min_value": 100, "max_value": 50000000 },
+      "meta": { "notes": "Curated mart must have at least 100 customers (sanity check)" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "total_revenue",
+        "min_value": 0.01,
+        "max_value": 10000000.0,
+        "mostly": 0.999
+      },
+      "meta": { "notes": "Revenue outlier check — flag values > 10M as suspicious" }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+---
+# MinIO: 1 server / 4 volumes in staging (single-node, no erasure coding HA)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: lakehouse-storage
+spec:
+  replicas: 1

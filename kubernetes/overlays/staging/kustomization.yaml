@@ -1,0 +1,59 @@
+---
+# kubernetes/overlays/staging/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+namespace: lakehouse-data
+
+commonLabels:
+  environment: staging
+
+patches:
+  - path: patches/trino-replicas.yaml
+    target:
+      kind: Deployment
+      name: trino-coordinator
+  - path: patches/trino-worker-replicas.yaml
+    target:
+      kind: Deployment
+      name: trino-worker
+  - path: patches/polaris-replicas.yaml
+    target:
+      kind: StatefulSet
+      name: polaris
+  - path: patches/ranger-replicas.yaml
+    target:
+      kind: Deployment
+      name: ranger-admin
+  - path: patches/keycloak-replicas.yaml
+    target:
+      kind: StatefulSet
+      name: keycloak
+  - path: patches/openbao-replicas.yaml
+    target:
+      kind: StatefulSet
+      name: openbao
+  - path: patches/minio-replicas.yaml
+    target:
+      kind: StatefulSet
+      name: minio
+  - path: patches/airflow-replicas.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: "app.kubernetes.io/name=airflow"
+  - path: patches/resource-limits-staging.yaml
+    target:
+      kind: ResourceQuota
+      name: lakehouse-data-quota
+
+configMapGenerator:
+  - name: environment-config
+    literals:
+      - ENVIRONMENT=staging
+      - LOG_LEVEL=DEBUG
+      - TRACING_ENABLED=true

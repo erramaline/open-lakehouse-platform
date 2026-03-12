@@ -1,0 +1,19 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: polaris
+  namespace: lakehouse-data
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: polaris
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi

@@ -1,0 +1,45 @@
+{
+  "policyName": "iceberg-row-filter-customers",
+  "policyType": 2,
+  "serviceType": "trino",
+  "serviceName": "trino_lakehouse",
+  "description": "Row-level filter on customers table: analysts see only their assigned region; engineers and admins see all rows",
+  "isAuditEnabled": true,
+  "isDenyAllElse": false,
+  "resources": {
+    "catalog":   { "values": ["lakehouse"], "isExcludes": false, "isRecursive": false },
+    "schema":    { "values": ["curated"],   "isExcludes": false, "isRecursive": false },
+    "table":     { "values": ["customers"], "isExcludes": false, "isRecursive": false }
+  },
+  "rowFilterPolicyItems": [
+    {
+      "groups": ["data-analysts"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "rowFilterInfo": {
+        "filterExpr": "region = current_setting('ranger.assigned_region', true)"
+      },
+      "conditions": []
+    },
+    {
+      "groups": ["data-engineers", "platform-admins"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "rowFilterInfo": {
+        "filterExpr": ""
+      },
+      "conditions": []
+    },
+    {
+      "groups": ["data-stewards"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "rowFilterInfo": {
+        "filterExpr": ""
+      },
+      "conditions": []
+    }
+  ],
+  "validitySchedules": [],
+  "policyLabels": ["governance", "row-filter", "pii"]
+}

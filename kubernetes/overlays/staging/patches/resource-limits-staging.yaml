@@ -1,0 +1,16 @@
+---
+# Reduced resource quota for staging
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-data-quota
+  namespace: lakehouse-data
+spec:
+  hard:
+    requests.cpu: "8"
+    limits.cpu: "16"
+    requests.memory: 32Gi
+    limits.memory: 64Gi
+    requests.storage: 50Gi
+    persistentvolumeclaims: "10"
+    pods: "30"

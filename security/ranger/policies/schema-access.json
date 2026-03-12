@@ -1,0 +1,107 @@
+{
+  "policyName": "schema-access-control",
+  "policyType": 0,
+  "serviceType": "trino",
+  "serviceName": "trino_lakehouse",
+  "description": "Schema-level access control: engineers RW all, analysts READ curated only, stewards READ all, admins full control",
+  "isAuditEnabled": true,
+  "isDenyAllElse": true,
+  "resources": {
+    "catalog": { "values": ["lakehouse"], "isExcludes": false, "isRecursive": false },
+    "schema":  { "values": ["*"],          "isExcludes": false, "isRecursive": true },
+    "table":   { "values": ["*"],          "isExcludes": false, "isRecursive": true },
+    "column":  { "values": ["*"],          "isExcludes": false, "isRecursive": true }
+  },
+  "policyItems": [
+    {
+      "groups": ["platform-admins"],
+      "users": [],
+      "delegateAdmin": true,
+      "accesses": [
+        { "type": "select",           "isAllowed": true },
+        { "type": "insert",           "isAllowed": true },
+        { "type": "update",           "isAllowed": true },
+        { "type": "delete",           "isAllowed": true },
+        { "type": "use",              "isAllowed": true },
+        { "type": "create",           "isAllowed": true },
+        { "type": "drop",             "isAllowed": true },
+        { "type": "alter",            "isAllowed": true },
+        { "type": "index",            "isAllowed": true },
+        { "type": "lock",             "isAllowed": true },
+        { "type": "all",              "isAllowed": true },
+        { "type": "read",             "isAllowed": true },
+        { "type": "write",            "isAllowed": true },
+        { "type": "repladmin",       "isAllowed": true },
+        { "type": "serviceadmin",    "isAllowed": true }
+      ],
+      "conditions": [],
+      "_comment": "platform-admin: full control + delegateAdmin"
+    },
+    {
+      "groups": ["data-engineers"],
+      "users": [],
+      "delegateAdmin": false,
+      "accesses": [
+        { "type": "select", "isAllowed": true },
+        { "type": "insert", "isAllowed": true },
+        { "type": "update", "isAllowed": true },
+        { "type": "delete", "isAllowed": true },
+        { "type": "use",    "isAllowed": true },
+        { "type": "create", "isAllowed": true },
+        { "type": "drop",   "isAllowed": true },
+        { "type": "alter",  "isAllowed": true }
+      ],
+      "conditions": [],
+      "_comment": "data-engineer: full DDL/DML across all schemas"
+    },
+    {
+      "groups": ["data-stewards"],
+      "users": [],
+      "delegateAdmin": false,
+      "accesses": [
+        { "type": "select", "isAllowed": true },
+        { "type": "use",    "isAllowed": true }
+      ],
+      "conditions": [],
+      "_comment": "data-steward: read-only across all schemas (raw, staging, curated)"
+    }
+  ],
+  "allowExceptions": [],
+  "denyPolicyItems": [
+    {
+      "groups": ["data-analysts"],
+      "users": [],
+      "accesses": [
+        { "type": "select", "isAllowed": true }
+      ],
+      "conditions": [
+        {
+          "type": "not-in",
+          "values": ["lakehouse/curated"]
+        }
+      ],
+      "_comment": "Deny analysts access to raw and staging schemas"
+    }
+  ],
+  "specificPolicyItems": [
+    {
+      "groups": ["data-analysts"],
+      "users": [],
+      "delegateAdmin": false,
+      "accesses": [
+        { "type": "select", "isAllowed": true },
+        { "type": "use",    "isAllowed": true }
+      ],
+      "conditions": [],
+      "resourceSpec": {
+        "catalog": { "values": ["lakehouse"] },
+        "schema":  { "values": ["curated"] },
+        "table":   { "values": ["*"] },
+        "column":  { "values": ["*"] }
+      },
+      "_comment": "data-analyst: SELECT on lakehouse.curated.* only"
+    }
+  ],
+  "validitySchedules": [],
+  "policyLabels": ["governance", "schema-access", "rbac"]
+}

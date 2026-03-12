@@ -1,0 +1,20 @@
+---
+# Trino workers: 3 replicas initial (HPA max=10), production resource limits
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: trino-worker
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi

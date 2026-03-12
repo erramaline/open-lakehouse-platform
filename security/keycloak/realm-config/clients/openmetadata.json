@@ -1,0 +1,54 @@
+{
+  "clientId": "openmetadata",
+  "name": "OpenMetadata",
+  "description": "OIDC client for OpenMetadata Server — PKCE Authorization Code flow",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": false,
+  "redirectUris": [
+    "${env.OPENMETADATA_URL}/callback",
+    "http://localhost:8585/callback"
+  ],
+  "webOrigins": ["${env.OPENMETADATA_URL}", "http://localhost:8585"],
+  "secret": "${env.KEYCLOAK_OPENMETADATA_CLIENT_SECRET}",
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "access.token.lifespan": "300"
+  },
+  "defaultClientScopes": ["openid", "profile", "email", "roles"],
+  "optionalClientScopes": ["offline_access"],
+  "protocolMappers": [
+    {
+      "name": "groups-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    },
+    {
+      "name": "openmetadata-role-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-realm-role-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "realm_access.roles",
+        "multivalued": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    }
+  ]
+}

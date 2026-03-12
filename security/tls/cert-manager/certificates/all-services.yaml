@@ -1,0 +1,492 @@
+##
+## cert-manager Certificate CRDs — Open Lakehouse Platform
+## One Certificate per service. All use the openbao-issuer ClusterIssuer.
+## ADR-006: 90-day certificate lifetime, autorenew at 60 days (2/3 of lifetime).
+##
+## Namespacing follows PLAN.md section 3.2:
+##   lakehouse-data   : trino, polaris, nessie, ranger
+##   lakehouse-system : keycloak, openbao, postgresql
+##   lakehouse-obs    : prometheus, grafana, loki, otel-collector
+##   lakehouse-storage: minio
+##   lakehouse-ingest : airflow, docling, openmetadata
+##
+
+---
+# ─── Trino Coordinator ────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-coordinator-tls
+  namespace: lakehouse-data
+spec:
+  secretName: trino-coordinator-tls
+  duration:    2160h   # 90 days
+  renewBefore: 720h    # 30 days before expiry (at 60 days remaining)
+  commonName:  trino-coordinator.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - trino-coordinator
+    - trino-coordinator.lakehouse-data
+    - trino-coordinator.lakehouse-data.svc
+    - trino-coordinator.lakehouse-data.svc.cluster.local
+    - trino
+    - trino.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Trino Workers ────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-workers-tls
+  namespace: lakehouse-data
+spec:
+  secretName: trino-workers-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  trino-worker.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - "*.trino-worker.lakehouse-data.svc.cluster.local"
+    - trino-worker-0.trino-worker.lakehouse-data.svc.cluster.local
+    - trino-worker-1.trino-worker.lakehouse-data.svc.cluster.local
+    - trino-worker-2.trino-worker.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Trino Gateway ────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-gateway-tls
+  namespace: lakehouse-data
+spec:
+  secretName: trino-gateway-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  trino-gateway.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - trino-gateway
+    - trino-gateway.lakehouse-data
+    - trino-gateway.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Apache Polaris ───────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: polaris-tls
+  namespace: lakehouse-data
+spec:
+  secretName: polaris-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  polaris.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - polaris
+    - polaris.lakehouse-data
+    - polaris.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Project Nessie ───────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nessie-tls
+  namespace: lakehouse-data
+spec:
+  secretName: nessie-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  nessie.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - nessie
+    - nessie.lakehouse-data
+    - nessie.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Apache Ranger ────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ranger-tls
+  namespace: lakehouse-data
+spec:
+  secretName: ranger-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  ranger.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - ranger
+    - ranger-admin
+    - ranger.lakehouse-data
+    - ranger.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Keycloak ─────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+  namespace: lakehouse-system
+spec:
+  secretName: keycloak-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  keycloak.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - keycloak
+    - keycloak.lakehouse-system
+    - keycloak.lakehouse-system.svc.cluster.local
+    - auth.lakehouse.internal
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── OpenBao (Raft cluster — wildcard for all nodes) ─────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-tls
+  namespace: lakehouse-system
+spec:
+  secretName: openbao-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  openbao.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - openbao
+    - openbao.lakehouse-system
+    - openbao.lakehouse-system.svc.cluster.local
+    - "*.openbao.lakehouse-system.svc.cluster.local"
+    - openbao-0.openbao.lakehouse-system.svc.cluster.local
+    - openbao-1.openbao.lakehouse-system.svc.cluster.local
+    - openbao-2.openbao.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── PostgreSQL / PgBouncer ───────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgresql-tls
+  namespace: lakehouse-system
+spec:
+  secretName: postgresql-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  postgresql.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - postgresql
+    - postgresql.lakehouse-system
+    - postgresql.lakehouse-system.svc.cluster.local
+    - pgbouncer
+    - pgbouncer.lakehouse-system
+    - pgbouncer.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── MinIO ────────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio-tls
+  namespace: lakehouse-storage
+spec:
+  secretName: minio-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  minio.lakehouse-storage.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - minio
+    - minio.lakehouse-storage
+    - minio.lakehouse-storage.svc.cluster.local
+    - "*.minio.lakehouse-storage.svc.cluster.local"
+    - minio-0.minio.lakehouse-storage.svc.cluster.local
+    - minio-1.minio.lakehouse-storage.svc.cluster.local
+    - minio-2.minio.lakehouse-storage.svc.cluster.local
+    - minio-3.minio.lakehouse-storage.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Elasticsearch ────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: elasticsearch-tls
+  namespace: lakehouse-system
+spec:
+  secretName: elasticsearch-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  elasticsearch.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - elasticsearch
+    - elasticsearch.lakehouse-system
+    - elasticsearch.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── OpenMetadata ─────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openmetadata-tls
+  namespace: lakehouse-ingest
+spec:
+  secretName: openmetadata-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  openmetadata.lakehouse-ingest.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - openmetadata
+    - openmetadata.lakehouse-ingest
+    - openmetadata.lakehouse-ingest.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Apache Airflow ───────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: airflow-tls
+  namespace: lakehouse-ingest
+spec:
+  secretName: airflow-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  airflow.lakehouse-ingest.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - airflow
+    - airflow-webserver
+    - airflow.lakehouse-ingest
+    - airflow.lakehouse-ingest.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Docling ──────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: docling-tls
+  namespace: lakehouse-ingest
+spec:
+  secretName: docling-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  docling.lakehouse-ingest.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - docling
+    - docling-api
+    - docling.lakehouse-ingest
+    - docling.lakehouse-ingest.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Prometheus ───────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: prometheus-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: prometheus-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  prometheus.lakehouse-obs.svc.cluster.local
+  dnsNames:
+    - prometheus
+    - prometheus.lakehouse-obs
+    - prometheus.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Grafana ──────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: grafana-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  grafana.lakehouse-obs.svc.cluster.local
+  dnsNames:
+    - grafana
+    - grafana.lakehouse-obs
+    - grafana.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── Loki ─────────────────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loki-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: loki-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  loki.lakehouse-obs.svc.cluster.local
+  dnsNames:
+    - loki
+    - loki.lakehouse-obs
+    - loki.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io
+
+---
+# ─── OTel Collector ───────────────────────────────────────────────────────────
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: otel-collector-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: otel-collector-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  otel-collector.lakehouse-obs.svc.cluster.local
+  dnsNames:
+    - otel-collector
+    - otel-collector.lakehouse-obs
+    - otel-collector.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

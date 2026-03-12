@@ -1,0 +1,362 @@
+{
+  "realm": "lakehouse",
+  "displayName": "Open Lakehouse Platform",
+  "displayNameHtml": "<b>Open Lakehouse Platform</b>",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      { "name": "data-engineer",   "description": "Full read/write access to all data layers" },
+      { "name": "data-analyst",    "description": "Read-only access to curated schema" },
+      { "name": "data-steward",    "description": "Read-only access to all schemas, data governance duties" },
+      { "name": "platform-admin",  "description": "Full administrative access including delegateAdmin in Ranger" }
+    ]
+  },
+  "groups": [
+    {
+      "name": "data-engineers",
+      "path": "/data-engineers",
+      "realmRoles": ["data-engineer"]
+    },
+    {
+      "name": "data-analysts",
+      "path": "/data-analysts",
+      "realmRoles": ["data-analyst"]
+    },
+    {
+      "name": "data-stewards",
+      "path": "/data-stewards",
+      "realmRoles": ["data-steward"]
+    },
+    {
+      "name": "platform-admins",
+      "path": "/platform-admins",
+      "realmRoles": ["platform-admin"]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@lakehouse.local",
+      "firstName": "Alice",
+      "lastName": "Engineer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${env.ALICE_PASSWORD}", "temporary": false }],
+      "groups": ["data-engineers"],
+      "realmRoles": ["data-engineer"]
+    },
+    {
+      "username": "bob",
+      "email": "bob@lakehouse.local",
+      "firstName": "Bob",
+      "lastName": "Analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${env.BOB_PASSWORD}", "temporary": false }],
+      "groups": ["data-analysts"],
+      "realmRoles": ["data-analyst"]
+    },
+    {
+      "username": "carol",
+      "email": "carol@lakehouse.local",
+      "firstName": "Carol",
+      "lastName": "Steward",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${env.CAROL_PASSWORD}", "temporary": false }],
+      "groups": ["data-stewards"],
+      "realmRoles": ["data-steward"]
+    },
+    {
+      "username": "dan",
+      "email": "dan@lakehouse.local",
+      "firstName": "Dan",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${env.DAN_PASSWORD}", "temporary": false }],
+      "groups": ["platform-admins"],
+      "realmRoles": ["platform-admin"]
+    },
+    {
+      "username": "mallory",
+      "email": "mallory@lakehouse.local",
+      "firstName": "Mallory",
+      "lastName": "Untrusted",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${env.MALLORY_PASSWORD}", "temporary": false }],
+      "groups": [],
+      "realmRoles": []
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "trino",
+      "name": "Trino Query Engine",
+      "description": "OIDC client for Trino Gateway JWT verification",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "redirectUris": ["${env.TRINO_GATEWAY_URL}/callback", "${env.TRINO_GATEWAY_URL}/oauth2/callback"],
+      "webOrigins": ["${env.TRINO_GATEWAY_URL}"],
+      "secret": "${env.KEYCLOAK_TRINO_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "300",
+        "use.refresh.tokens": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "airflow",
+      "name": "Apache Airflow",
+      "description": "OIDC client for Airflow Webserver",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${env.AIRFLOW_URL}/oauth-authorized/keycloak"],
+      "webOrigins": ["${env.AIRFLOW_URL}"],
+      "secret": "${env.KEYCLOAK_AIRFLOW_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "openmetadata",
+      "name": "OpenMetadata",
+      "description": "OIDC client for OpenMetadata Server",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${env.OPENMETADATA_URL}/callback"],
+      "webOrigins": ["${env.OPENMETADATA_URL}"],
+      "secret": "${env.KEYCLOAK_OPENMETADATA_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "grafana",
+      "name": "Grafana",
+      "description": "OIDC client for Grafana dashboards",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${env.GRAFANA_URL}/login/generic_oauth"],
+      "webOrigins": ["${env.GRAFANA_URL}"],
+      "secret": "${env.KEYCLOAK_GRAFANA_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "minio",
+      "name": "MinIO Object Storage",
+      "description": "OIDC client for MinIO Console SSO",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${env.MINIO_CONSOLE_URL}/oauth_callback"],
+      "webOrigins": ["${env.MINIO_CONSOLE_URL}"],
+      "secret": "${env.KEYCLOAK_MINIO_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "policy-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "policy",
+            "multivalued": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.storage.UserStorageProvider": [
+      {
+        "name": "ranger-ldap-sync",
+        "providerId": "ldap",
+        "config": {
+          "enabled": ["true"],
+          "vendor": ["other"],
+          "connectionUrl": ["${env.LDAP_URL:-ldap://openldap:389}"],
+          "bindDn": ["${env.LDAP_BIND_DN:-cn=admin,dc=lakehouse,dc=local}"],
+          "bindCredential": ["${env.LDAP_BIND_PASSWORD}"],
+          "usersDn": ["${env.LDAP_USERS_DN:-ou=users,dc=lakehouse,dc=local}"],
+          "usernameLDAPAttribute": ["uid"],
+          "rdnLDAPAttribute": ["uid"],
+          "uuidLDAPAttribute": ["entryUUID"],
+          "userObjectClasses": ["inetOrgPerson"],
+          "searchScope": ["1"],
+          "syncRegistrations": ["false"],
+          "importEnabled": ["true"],
+          "periodicFullSync": ["true"],
+          "fullSyncPeriod": ["3600"],
+          "periodicChangedUsersSync": ["true"],
+          "changedSyncPeriod": ["300"]
+        },
+        "subComponents": {
+          "org.keycloak.storage.ldap.mappers.LDAPStorageMapper": [
+            {
+              "name": "groups-mapper",
+              "providerId": "group-ldap-mapper",
+              "config": {
+                "mode": ["READ_ONLY"],
+                "membership.attribute.type": ["DN"],
+                "group.name.ldap.attribute": ["cn"],
+                "membership.ldap.attribute": ["member"],
+                "group.object.classes": ["groupOfNames"],
+                "groups.dn": ["${env.LDAP_GROUPS_DN:-ou=groups,dc=lakehouse,dc=local}"],
+                "mapped.group.attributes": [""],
+                "drop.non.existing.groups.during.sync": ["false"]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xContentTypeOptions": "nosniff",
+    "xRobotsTag": "none",
+    "xFrameOptions": "SAMEORIGIN",
+    "xxssProtection": "1; mode=block",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
+  "eventsEnabled": true,
+  "eventsListeners": ["jboss-logging"],
+  "enabledEventTypes": [
+    "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
+    "REGISTER", "REGISTER_ERROR", "UPDATE_PASSWORD", "UPDATE_PASSWORD_ERROR",
+    "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR", "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+    "TOKEN_EXCHANGE", "TOKEN_EXCHANGE_ERROR", "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "internationalizationEnabled": false,
+  "defaultLocale": "en",
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak.v3",
+  "adminTheme": "keycloak.v2"
+}

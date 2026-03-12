@@ -1,0 +1,54 @@
+{
+  "clientId": "minio",
+  "name": "MinIO Object Storage",
+  "description": "OIDC client for MinIO Console SSO — PKCE Authorization Code flow with policy claim",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": false,
+  "redirectUris": [
+    "${env.MINIO_CONSOLE_URL}/oauth_callback",
+    "http://localhost:9001/oauth_callback"
+  ],
+  "webOrigins": ["${env.MINIO_CONSOLE_URL}", "http://localhost:9001"],
+  "secret": "${env.KEYCLOAK_MINIO_CLIENT_SECRET}",
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "access.token.lifespan": "300"
+  },
+  "defaultClientScopes": ["openid", "profile", "email", "roles"],
+  "optionalClientScopes": ["offline_access"],
+  "protocolMappers": [
+    {
+      "name": "groups-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    },
+    {
+      "name": "minio-policy-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-realm-role-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "policy",
+        "multivalued": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    }
+  ]
+}

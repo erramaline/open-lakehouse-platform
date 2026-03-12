@@ -1,0 +1,64 @@
+##
+## ClusterIssuer — OpenBao PKI engine as CA backend for cert-manager
+## ADR-006: cert-manager + OpenBao PKI (not service mesh)
+##
+## Prerequisites:
+##   1. OpenBao initialized and unsealed
+##   2. PKI engine enabled at `pki/` in OpenBao
+##   3. Intermediate CA role "lakehouse-intermediate" created in OpenBao
+##   4. K8s auth method enabled in OpenBao with appropriate policy
+##   5. cert-manager installed in the cluster
+##
+## Setup sequence:
+##   $ bao secrets enable -path=pki pki
+##   $ bao secrets tune -max-lease-ttl=87600h pki
+##   $ bao write pki/root/generate/internal \
+##       common_name="Open Lakehouse Internal CA" ttl=87600h
+##   $ bao write pki/config/urls \
+##       issuing_certificates="http://openbao:8200/v1/pki/ca" \
+##       crl_distribution_points="http://openbao:8200/v1/pki/crl"
+##   $ bao write pki/roles/lakehouse-intermediate \
+##       allowed_domains="lakehouse.svc.cluster.local,lakehouse-data,lakehouse-system,lakehouse-obs" \
+##       allow_subdomains=true allow_bare_domains=false \
+##       max_ttl=2160h key_type=rsa key_bits=2048 \
+##       server_flag=true client_flag=true
+##
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openbao-issuer
+  labels:
+    app.kubernetes.io/part-of:   open-lakehouse-platform
+    app.kubernetes.io/component: pki
+    security.lakehouse/managed:  "true"
+spec:
+  vault:
+    # OpenBao is API-compatible with HashiCorp Vault — use the Vault issuer.
+    server: http://openbao.lakehouse-system.svc.cluster.local:8200
+    path:   pki/sign/lakehouse-intermediate
+
+    # K8s service account token authentication
+    auth:
+      kubernetes:
+        # cert-manager's ServiceAccount token used to authenticate to OpenBao
+        mountPath: /v1/auth/kubernetes
+        role:      cert-manager   # OpenBao k8s auth role
+        secretRef:
+          name: cert-manager-openbao-token
+          key:  token
+
+---
+##
+## ClusterIssuer — Self-signed issuer for bootstrapping
+## Used to create the OpenBao intermediate CA certificate (chicken-and-egg bootstrap)
+##
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  labels:
+    app.kubernetes.io/part-of: open-lakehouse-platform
+    security.lakehouse/purpose: bootstrap-only
+spec:
+  selfSigned: {}

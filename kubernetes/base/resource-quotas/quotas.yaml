@@ -1,0 +1,213 @@
+---
+# =============================================================================
+# Resource Quotas — lakehouse-data (trino, polaris, nessie, ranger)
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-data-quota
+  namespace: lakehouse-data
+spec:
+  hard:
+    requests.cpu: "32"
+    limits.cpu: "64"
+    requests.memory: 128Gi
+    limits.memory: 256Gi
+    requests.storage: 200Gi
+    persistentvolumeclaims: "20"
+    pods: "80"
+    services: "20"
+    secrets: "40"
+    configmaps: "40"
+---
+# =============================================================================
+# Resource Quotas — lakehouse-system (keycloak, openbao, postgresql, elasticsearch)
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-system-quota
+  namespace: lakehouse-system
+spec:
+  hard:
+    requests.cpu: "16"
+    limits.cpu: "32"
+    requests.memory: 64Gi
+    limits.memory: 128Gi
+    requests.storage: 500Gi
+    persistentvolumeclaims: "30"
+    pods: "40"
+    services: "20"
+    secrets: "60"
+    configmaps: "40"
+---
+# =============================================================================
+# Resource Quotas — lakehouse-obs (prometheus, grafana, loki, otel-collector)
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-obs-quota
+  namespace: lakehouse-obs
+spec:
+  hard:
+    requests.cpu: "8"
+    limits.cpu: "16"
+    requests.memory: 32Gi
+    limits.memory: 64Gi
+    requests.storage: 200Gi
+    persistentvolumeclaims: "10"
+    pods: "30"
+    services: "15"
+    secrets: "20"
+    configmaps: "30"
+---
+# =============================================================================
+# Resource Quotas — lakehouse-ingest (airflow, docling, openmetadata)
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-ingest-quota
+  namespace: lakehouse-ingest
+spec:
+  hard:
+    requests.cpu: "16"
+    limits.cpu: "32"
+    requests.memory: 64Gi
+    limits.memory: 128Gi
+    requests.storage: 100Gi
+    persistentvolumeclaims: "15"
+    pods: "60"
+    services: "20"
+    secrets: "40"
+    configmaps: "40"
+---
+# =============================================================================
+# Resource Quotas — lakehouse-storage (minio)
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lakehouse-storage-quota
+  namespace: lakehouse-storage
+spec:
+  hard:
+    requests.cpu: "16"
+    limits.cpu: "32"
+    requests.memory: 64Gi
+    limits.memory: 128Gi
+    requests.storage: 10Ti
+    persistentvolumeclaims: "20"
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+---
+# =============================================================================
+# LimitRanges — default container limits if not specified
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: lakehouse-data
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 1Gi
+      defaultRequest:
+        cpu: 250m
+        memory: 256Mi
+      max:
+        cpu: "16"
+        memory: 64Gi
+      min:
+        cpu: 50m
+        memory: 64Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: lakehouse-system
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 2Gi
+      defaultRequest:
+        cpu: 250m
+        memory: 512Mi
+      max:
+        cpu: "8"
+        memory: 32Gi
+      min:
+        cpu: 50m
+        memory: 64Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: lakehouse-obs
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 1Gi
+      defaultRequest:
+        cpu: 100m
+        memory: 256Mi
+      max:
+        cpu: "8"
+        memory: 16Gi
+      min:
+        cpu: 50m
+        memory: 64Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: lakehouse-ingest
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 2Gi
+      defaultRequest:
+        cpu: 250m
+        memory: 512Mi
+      max:
+        cpu: "8"
+        memory: 32Gi
+      min:
+        cpu: 50m
+        memory: 64Mi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: lakehouse-storage
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "2"
+        memory: 4Gi
+      defaultRequest:
+        cpu: 500m
+        memory: 1Gi
+      max:
+        cpu: "16"
+        memory: 64Gi
+      min:
+        cpu: 100m
+        memory: 256Mi

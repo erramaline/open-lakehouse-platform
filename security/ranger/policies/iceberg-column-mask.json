@@ -1,0 +1,102 @@
+{
+  "policyName": "iceberg-column-mask-customers",
+  "policyType": 1,
+  "serviceType": "trino",
+  "serviceName": "trino_lakehouse",
+  "description": "Column-level masking on customers table for PII fields (email, phone, ssn)",
+  "isAuditEnabled": true,
+  "resources": {
+    "catalog": { "values": ["lakehouse"], "isExcludes": false, "isRecursive": false },
+    "schema":  { "values": ["curated"],   "isExcludes": false, "isRecursive": false },
+    "table":   { "values": ["customers"], "isExcludes": false, "isRecursive": false },
+    "column":  { "values": ["email", "phone", "ssn"], "isExcludes": false, "isRecursive": false }
+  },
+  "dataMaskPolicyItems": [
+    {
+      "dataMaskInfo": {
+        "dataMaskType": "MASK_HASH",
+        "valueExpr": null
+      },
+      "groups": ["data-analysts"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "conditions": [],
+      "_comment": "Applies to column=email: SHA256 hash for analysts"
+    },
+    {
+      "dataMaskInfo": {
+        "dataMaskType": "MASK_SHOW_FIRST_4",
+        "valueExpr": null
+      },
+      "groups": ["data-stewards"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "conditions": [],
+      "_comment": "Applies to column=email: first 3 chars + *** for stewards"
+    },
+    {
+      "dataMaskInfo": {
+        "dataMaskType": "NONE"
+      },
+      "groups": ["data-engineers"],
+      "users": [],
+      "accesses": [{ "type": "select", "isAllowed": true }],
+      "conditions": [],
+      "_comment": "Applies to column=email: full value for engineers"
+    }
+  ],
+  "perColumnPolicies": [
+    {
+      "column": "phone",
+      "dataMaskPolicyItems": [
+        {
+          "dataMaskInfo": { "dataMaskType": "MASK_NULL" },
+          "groups": ["data-analysts"],
+          "users": [],
+          "accesses": [{ "type": "select", "isAllowed": true }],
+          "conditions": [],
+          "_comment": "phone → NULL for analysts"
+        },
+        {
+          "dataMaskInfo": { "dataMaskType": "MASK_SHOW_FIRST_4" },
+          "groups": ["data-stewards"],
+          "users": [],
+          "accesses": [{ "type": "select", "isAllowed": true }],
+          "conditions": [],
+          "_comment": "phone → partial for stewards"
+        },
+        {
+          "dataMaskInfo": { "dataMaskType": "NONE" },
+          "groups": ["data-engineers"],
+          "users": [],
+          "accesses": [{ "type": "select", "isAllowed": true }],
+          "conditions": [],
+          "_comment": "phone → full for engineers"
+        }
+      ]
+    },
+    {
+      "column": "ssn",
+      "dataMaskPolicyItems": [
+        {
+          "dataMaskInfo": { "dataMaskType": "MASK_NULL" },
+          "groups": ["data-analysts", "data-stewards", "data-engineers"],
+          "users": [],
+          "accesses": [{ "type": "select", "isAllowed": true }],
+          "conditions": [],
+          "_comment": "ssn → NULL for everyone except platform-admin"
+        },
+        {
+          "dataMaskInfo": { "dataMaskType": "NONE" },
+          "groups": ["platform-admins"],
+          "users": [],
+          "accesses": [{ "type": "select", "isAllowed": true }],
+          "conditions": [],
+          "_comment": "ssn → full for platform-admins"
+        }
+      ]
+    }
+  ],
+  "validitySchedules": [],
+  "policyLabels": ["governance", "column-masking", "pii"]
+}

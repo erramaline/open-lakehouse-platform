@@ -1,0 +1,20 @@
+---
+# Trino coordinator: 2 replicas, production resource limits
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: lakehouse-data
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: trino-coordinator
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi

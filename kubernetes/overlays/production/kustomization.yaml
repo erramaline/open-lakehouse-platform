@@ -1,0 +1,54 @@
+---
+# kubernetes/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+commonLabels:
+  environment: production
+
+patches:
+  - path: patches/trino-ha.yaml
+    target:
+      kind: Deployment
+      name: trino-coordinator
+  - path: patches/trino-worker-ha.yaml
+    target:
+      kind: Deployment
+      name: trino-worker
+  - path: patches/polaris-ha.yaml
+    target:
+      kind: StatefulSet
+      name: polaris
+  - path: patches/openbao-ha.yaml
+    target:
+      kind: StatefulSet
+      name: openbao
+  - path: patches/minio-ha.yaml
+    target:
+      kind: StatefulSet
+      name: minio
+  - path: patches/keycloak-ha.yaml
+    target:
+      kind: StatefulSet
+      name: keycloak
+  - path: patches/anti-affinity.yaml
+    target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+  - path: patches/anti-affinity-deploy.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+  - path: patches/topology-spread.yaml
+
+configMapGenerator:
+  - name: environment-config
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - TRACING_ENABLED=true

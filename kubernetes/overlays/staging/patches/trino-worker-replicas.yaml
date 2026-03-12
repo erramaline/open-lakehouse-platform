@@ -1,0 +1,9 @@
+---
+# Trino workers: 2 replicas in staging (vs 3+ in prod)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+spec:
+  replicas: 2

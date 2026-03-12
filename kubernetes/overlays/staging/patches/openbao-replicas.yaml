@@ -1,0 +1,9 @@
+---
+# OpenBao: 1-node Raft in staging (dev mode)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openbao
+  namespace: lakehouse-system
+spec:
+  replicas: 1

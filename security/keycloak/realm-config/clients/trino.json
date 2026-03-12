@@ -1,0 +1,73 @@
+{
+  "clientId": "trino",
+  "name": "Trino Query Engine",
+  "description": "OIDC client for Trino Gateway — PKCE + Client Credentials for service account",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": true,
+  "authorizationServicesEnabled": false,
+  "frontchannelLogout": true,
+  "redirectUris": [
+    "${env.TRINO_GATEWAY_URL}/callback",
+    "${env.TRINO_GATEWAY_URL}/oauth2/callback",
+    "http://localhost:8080/callback"
+  ],
+  "webOrigins": ["${env.TRINO_GATEWAY_URL}", "http://localhost:8080"],
+  "secret": "${env.KEYCLOAK_TRINO_CLIENT_SECRET}",
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "access.token.lifespan": "300",
+    "use.refresh.tokens": "true",
+    "client.session.idle.timeout": "1800",
+    "client.session.max.lifespan": "36000"
+  },
+  "defaultClientScopes": ["openid", "profile", "email", "roles"],
+  "optionalClientScopes": ["address", "phone", "offline_access"],
+  "protocolMappers": [
+    {
+      "name": "groups-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    },
+    {
+      "name": "realm-roles-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-realm-role-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "realm_access.roles",
+        "multivalued": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "false",
+        "jsonType.label": "String"
+      }
+    },
+    {
+      "name": "trino-subject-mapper",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "sub",
+        "user.attribute": "username",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String"
+      }
+    }
+  ]
+}

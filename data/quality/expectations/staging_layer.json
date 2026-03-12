@@ -1,0 +1,116 @@
+{
+  "expectation_suite_name": "staging_layer",
+  "data_asset_type": "Dataset",
+  "meta": {
+    "great_expectations_version": "0.18.x",
+    "description": "Data quality expectations for dbt staging models. Validates deduplication, referential integrity, and type conformance after transformation.",
+    "layer": "staging",
+    "owner": "data-engineers"
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "customer_id" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "order_id" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "order_date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "order_amount" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "status" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "_dbt_source_relation" },
+      "meta": { "notes": "dbt metadata column must be present" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "customer_id", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "order_id", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "order_date", "mostly": 1.0 },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": { "column": "order_id" },
+      "meta": { "notes": "No duplicate orders after deduplication in staging" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "order_amount",
+        "min_value": 0.0,
+        "max_value": 10000000.0,
+        "mostly": 0.999
+      },
+      "meta": { "notes": "Order amounts must be non-negative and realistic" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "status",
+        "value_set": ["pending", "confirmed", "fulfilled", "cancelled", "refunded", "disputed"],
+        "mostly": 1.0
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "order_date",
+        "min_value": "2015-01-01",
+        "max_value": "2100-12-31",
+        "mostly": 0.999,
+        "parse_strings_as_datetimes": true
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": { "min_value": 1, "max_value": 100000000 },
+      "meta": { "notes": "Staging table must not be empty" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "customer_id",
+        "regex": "^CUST-[0-9]{6,12}$",
+        "mostly": 0.99
+      },
+      "meta": { "notes": "customer_id must follow CUST-NNNNNN format" }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_to_be_equal",
+      "kwargs": {
+        "column_A": "_source_event_id",
+        "column_B": "event_id",
+        "ignore_row_if": "either_value_is_missing",
+        "mostly": 1.0
+      },
+      "meta": { "notes": "Staged orders must trace back to source event" }
+    }
+  ]
+}

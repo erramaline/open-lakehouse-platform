@@ -1,0 +1,43 @@
+{
+  "policyName": "audit-customers-orders",
+  "policyType": 0,
+  "serviceType": "trino",
+  "serviceName": "trino_lakehouse",
+  "description": "Audit ALL access (ALLOW and DENY) to customers and orders tables across all roles",
+  "isAuditEnabled": true,
+  "isDenyAllElse": false,
+  "resources": {
+    "catalog": { "values": ["lakehouse"],              "isExcludes": false, "isRecursive": false },
+    "schema":  { "values": ["curated", "raw"],         "isExcludes": false, "isRecursive": false },
+    "table":   { "values": ["customers", "orders"],    "isExcludes": false, "isRecursive": false },
+    "column":  { "values": ["*"],                      "isExcludes": false, "isRecursive": true }
+  },
+  "policyItems": [
+    {
+      "groups": ["data-engineers", "data-analysts", "data-stewards", "platform-admins"],
+      "users": [],
+      "delegateAdmin": false,
+      "accesses": [
+        { "type": "select", "isAllowed": true },
+        { "type": "insert", "isAllowed": true },
+        { "type": "update", "isAllowed": true },
+        { "type": "delete", "isAllowed": true }
+      ],
+      "conditions": []
+    }
+  ],
+  "auditLogConfigs": [
+    {
+      "isAudited": true,
+      "isEnabled": true,
+      "auditType": "policy",
+      "auditFilter": {
+        "accessTypes": ["select", "insert", "update", "delete"],
+        "includePermitAccessTypes": true,
+        "includeDenyAccessTypes": true
+      }
+    }
+  ],
+  "validitySchedules": [],
+  "policyLabels": ["audit", "compliance", "pii", "gdpr"]
+}

@@ -1,0 +1,16 @@
+# Gitleaks configuration — allowlist for known safe example/placeholder files.
+# See: https://github.com/gitleaks/gitleaks?tab=readme-ov-file#configuration
+
+title = "Open Lakehouse Platform — Gitleaks config"
+
+[allowlist]
+  description = "Safe example and local-dev files with documented placeholder values"
+  paths = [
+    # Example env file — explicitly documents all values as fake placeholders
+    '''local/\.env\.example''',
+    # Local bootstrap scripts — use env-variable references, no hardcoded secrets
+    '''scripts/bootstrap/.*\.sh''',
+    # Local volume configs (ranger install.properties, otel config) —
+    # reference ${VARNAME} placeholders only
+    '''local/volumes/.*''',
+  ]

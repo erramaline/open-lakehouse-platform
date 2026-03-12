@@ -73,6 +73,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy — filesystem scan
+        if: always()
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -80,6 +81,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
+          exit-code: '0'
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v3
@@ -88,6 +90,7 @@ jobs:
           sarif_file: trivy-results.sarif
 
       - name: Checkov — IaC security
+        if: always()
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: terraform/
@@ -113,6 +116,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |

@@ -5,6 +5,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - pod-security/pod-security-admission.yaml
   - resource-quotas/quotas.yaml
   - rbac/service-accounts.yaml
   - ../../security/network-policies/k8s-network-policies.yaml

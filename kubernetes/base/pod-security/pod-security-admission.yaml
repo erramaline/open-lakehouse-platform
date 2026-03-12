@@ -1,0 +1,73 @@
+---
+# =============================================================================
+# Open Lakehouse Platform — PodSecurity Admission Configuration
+# Enforces the "restricted" PodSecurity Standard on all lakehouse namespaces.
+# Applied as Kustomize patches so labels are managed independently from
+# namespace declarations.
+# Ref: https://kubernetes.io/docs/concepts/security/pod-security-admission/
+# =============================================================================
+
+# lakehouse-data: Trino, Polaris, Ranger, Nessie
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-data
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# lakehouse-system: Keycloak, OpenBao, PostgreSQL, MinIO
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# lakehouse-ingest: Airflow, Docling, OpenMetadata
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-ingest
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# lakehouse-obs: Prometheus, Grafana, Loki, OpenTelemetry
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-obs
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# lakehouse-storage: MinIO (dedicated namespace for object storage tier)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lakehouse-storage
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest

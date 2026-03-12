@@ -86,7 +86,7 @@ module "eks" {
       disk_size      = var.storage_node_disk_gb
       labels = {
         role = "storage"
-        "topology.kubernetes.io/zone" = data.aws_availability_zones.available.names[0]
+        "topology.kubernetes.io/zone" = data.aws_availability_zones.available[0].names[0]
       }
     }
   }
@@ -172,7 +172,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     node_labels = {
       role = "system"
     }
-    node_taints = ["system=true:NoSchedule"]
+    # node_taints are managed via azurerm_kubernetes_cluster_node_pool for non-default pools
   }
 
   identity {
@@ -195,7 +195,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "data" {
   node_count            = var.data_nodes_desired
   min_count             = var.data_nodes_min
   max_count             = var.data_nodes_max
-  enable_auto_scaling   = true
+  auto_scaling_enabled  = true
   os_disk_size_gb       = var.data_node_disk_gb
   node_labels = {
     role = "data"
@@ -210,9 +210,10 @@ data "aws_availability_zones" "available" {
 
 # ── Locally scoped networking module reference ────────────────────────────────
 module "networking" {
-  count        = var.cloud_provider == "aws" ? 1 : 0
-  source       = "../networking"
-  cluster_name = var.cluster_name
-  vpc_cidr     = var.vpc_cidr
-  tags         = var.tags
+  count          = var.cloud_provider == "aws" ? 1 : 0
+  source         = "../networking"
+  cloud_provider = var.cloud_provider
+  cluster_name   = var.cluster_name
+  vpc_cidr       = var.vpc_cidr
+  tags           = var.tags
 }

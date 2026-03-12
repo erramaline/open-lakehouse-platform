@@ -49,6 +49,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "lakehouse" {
   rule {
     id     = "archive-old-data"
     status = "Enabled"
+    filter {}
     transition {
       days          = var.s3_ia_transition_days
       storage_class = "STANDARD_IA"
@@ -90,12 +91,18 @@ resource "google_storage_bucket" "lakehouse" {
   }
 
   lifecycle_rule {
-    action { type = "SetStorageClass"; storage_class = "NEARLINE" }
+    action {
+      type          = "SetStorageClass"
+      storage_class = "NEARLINE"
+    }
     condition { age = var.s3_ia_transition_days }
   }
 
   lifecycle_rule {
-    action { type = "SetStorageClass"; storage_class = "COLDLINE" }
+    action {
+      type          = "SetStorageClass"
+      storage_class = "COLDLINE"
+    }
     condition { age = var.s3_glacier_transition_days }
   }
 
@@ -112,7 +119,7 @@ resource "azurerm_storage_account" "lakehouse" {
   account_tier             = "Standard"
   account_replication_type = "ZRS"
   min_tls_version          = "TLS1_2"
-  enable_https_traffic_only = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
 
   blob_properties {

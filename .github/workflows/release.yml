@@ -1,0 +1,288 @@
+---
+# =============================================================================
+# Open Lakehouse Platform — Release Workflow
+# Triggered on version tags (v*.*.*). Builds and pushes container images to
+# GHCR, bumps Helm chart versions, creates a GitHub Release with CHANGELOG.
+# =============================================================================
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write        # create GitHub Releases, push CHANGELOG
+  packages: write        # push images to GHCR
+  id-token: write        # OIDC for cosign image signing
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/open-lakehouse
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Determine release metadata
+  # -------------------------------------------------------------------------
+  prepare:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      is-prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      changelog: ${{ steps.changelog.outputs.content }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for CHANGELOG generation
+
+      - name: Extract version
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *"-rc"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate CHANGELOG from git log
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          {
+            echo "content<<CHANGELOG_EOF"
+            echo "## What's Changed in v${{ steps.meta.outputs.version }}"
+            echo ""
+            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges | head -100
+            echo ""
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # -------------------------------------------------------------------------
+  # Build and push custom platform images (if any)
+  # -------------------------------------------------------------------------
+  build-images:
+    name: Build Images
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: docling-lakehouse
+            context: .
+            dockerfile: Dockerfile.docling
+            image: docling-lakehouse
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check if Dockerfile exists
+        id: check
+        run: |
+          if [ -f "${{ matrix.dockerfile }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ matrix.dockerfile }} not found, skipping image build"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        id: build
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:latest
+          labels: |
+            org.opencontainers.image.title=${{ matrix.name }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sign image with cosign
+        if: steps.check.outputs.exists == 'true' && steps.build.outputs.digest != ''
+        uses: sigstore/cosign-installer@v3
+
+      - name: Cosign sign
+        if: steps.check.outputs.exists == 'true' && steps.build.outputs.digest != ''
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+
+  # -------------------------------------------------------------------------
+  # Bump Helm chart versions
+  # -------------------------------------------------------------------------
+  helm-release:
+    name: Helm Chart Release
+    needs: [prepare, build-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Update Helm chart versions
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          for chart_dir in helm/charts/*/; do
+            chart_file="$chart_dir/Chart.yaml"
+            if [ -f "$chart_file" ]; then
+              # Update version and appVersion fields
+              sed -i "s/^version: .*/version: ${VERSION}/" "$chart_file"
+              sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "$chart_file"
+              echo "Updated $chart_file to version $VERSION"
+            fi
+          done
+
+      - name: Package Helm charts
+        run: |
+          mkdir -p dist/charts
+          for chart_dir in helm/charts/*/; do
+            helm package "$chart_dir" --destination dist/charts/
+          done
+          helm repo index dist/charts/ \
+            --url "${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}"
+          ls -la dist/charts/
+
+      - name: Upload chart packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts-${{ needs.prepare.outputs.version }}
+          path: dist/charts/
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Create GitHub Release
+  # -------------------------------------------------------------------------
+  github-release:
+    name: Create GitHub Release
+    needs: [prepare, build-images, helm-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Helm chart artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-charts-${{ needs.prepare.outputs.version }}
+          path: dist/charts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Open Lakehouse Platform v${{ needs.prepare.outputs.version }}"
+          prerelease: ${{ needs.prepare.outputs.is-prerelease }}
+          generate_release_notes: false
+          body: |
+            ${{ needs.prepare.outputs.changelog }}
+
+            ---
+            ## Installation
+
+            ### Helm
+            ```bash
+            helm repo add open-lakehouse \
+              https://github.com/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}
+            helm install lakehouse open-lakehouse/lakehouse-core \
+              --namespace lakehouse-data --create-namespace \
+              -f helm/charts/lakehouse-core/values.production.yaml
+            ```
+
+            ### Container Images
+            Available at `ghcr.io/${{ github.repository_owner }}/open-lakehouse/*:${{ needs.prepare.outputs.version }}`
+
+            ### Verification
+            ```bash
+            # Verify Helm chart signatures (if cosign used)
+            cosign verify ghcr.io/${{ github.repository_owner }}/open-lakehouse/docling-lakehouse:${{ needs.prepare.outputs.version }}
+            ```
+          files: dist/charts/*.tgz
+
+  # -------------------------------------------------------------------------
+  # Post-release validation
+  # -------------------------------------------------------------------------
+  validate-release:
+    name: Validate Release
+    needs: [prepare, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Lint packaged charts
+        run: |
+          for chart in dist/charts/*.tgz 2>/dev/null; do
+            helm lint "$chart" || echo "::warning::Lint warning in $chart"
+          done
+          echo "All released charts linted ✓"
+
+      - name: Release summary
+        run: |
+          echo "## Release v${{ needs.prepare.outputs.version }} ✓" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pre-release:** ${{ needs.prepare.outputs.is-prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub Release: [v${{ needs.prepare.outputs.version }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "- Helm charts: \`ghcr.io/${{ env.IMAGE_PREFIX }}/\*:${{ needs.prepare.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY

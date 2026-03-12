@@ -1,0 +1,236 @@
+---
+# =============================================================================
+# Open Lakehouse Platform — Security Scan Workflow
+# Weekly scan: container images (Trivy), IaC (Checkov), TLS cert expiry,
+# secrets audit, SBOM generation.
+# =============================================================================
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # 06:00 UTC every Monday
+  workflow_dispatch:
+    inputs:
+      severity:
+        description: 'Minimum Trivy severity to report'
+        required: false
+        default: 'HIGH'
+        type: choice
+        options:
+          - CRITICAL
+          - HIGH
+          - MEDIUM
+          - LOW
+
+permissions:
+  contents: read
+  security-events: write   # for GitHub SARIF upload
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Container image scan with Trivy
+  # -------------------------------------------------------------------------
+  trivy-images:
+    name: Trivy — Container Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - trinodb/trino:latest
+          - apache/polaris:latest
+          - projectnessie/nessie:latest
+          - quay.io/keycloak/keycloak:latest
+          - quay.io/openbao/openbao:latest
+          - minio/minio:latest
+          - apache/ranger:latest
+          - apache/airflow:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.image }}
+          format: sarif
+          severity: ${{ github.event.inputs.severity || 'HIGH' }},CRITICAL
+          output: trivy-${{ strategy.job-index }}.sarif
+          exit-code: '0'   # Do not fail the job; we upload SARIF for review
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ strategy.job-index }}.sarif
+          category: trivy-image-${{ strategy.job-index }}
+
+  # -------------------------------------------------------------------------
+  # Filesystem and repo scan with Trivy
+  # -------------------------------------------------------------------------
+  trivy-fs:
+    name: Trivy — Filesystem & Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (misconfig + secret)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          scanners: misconfig,secret,vuln
+          severity: MEDIUM,HIGH,CRITICAL
+          output: trivy-fs.sarif
+          exit-code: '0'
+
+      - name: Upload filesystem SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  # -------------------------------------------------------------------------
+  # IaC scan with Checkov
+  # -------------------------------------------------------------------------
+  checkov:
+    name: Checkov — IaC Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov on Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-terraform.sarif
+          soft_fail: true
+
+      - name: Run Checkov on Kubernetes manifests
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: kubernetes/
+          framework: kubernetes
+          output_format: sarif
+          output_file_path: checkov-k8s.sarif
+          soft_fail: true
+
+      - name: Run Checkov on Helm charts
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: helm/
+          framework: helm
+          output_format: sarif
+          output_file_path: checkov-helm.sarif
+          soft_fail: true
+
+      - name: Upload Checkov SARIFs
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov-terraform.sarif
+          category: checkov-terraform
+
+  # -------------------------------------------------------------------------
+  # TLS certificate expiry check
+  # -------------------------------------------------------------------------
+  cert-expiry:
+    name: TLS Certificate Expiry
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check cert-manager source certificates for expiry annotations
+        run: |
+          echo "## TLS Certificate Expiry Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # Parse all certificate definitions and confirm renewBefore >= 720h (30d)
+          python3 - << 'EOF'
+          import glob, yaml, sys
+
+          WARNING_DAYS = 30
+          issues = []
+          for path in glob.glob("security/tls/**/*.yaml", recursive=True):
+              try:
+                  with open(path) as f:
+                      for doc in yaml.safe_load_all(f):
+                          if not doc or doc.get("kind") != "Certificate":
+                              continue
+                          spec = doc.get("spec", {})
+                          renew = spec.get("renewBefore", "720h")
+                          # Parse hours
+                          hours = int(renew.rstrip("h"))
+                          if hours < WARNING_DAYS * 24:
+                              issues.append(f"{path}: renewBefore={renew} < {WARNING_DAYS}d")
+              except Exception as e:
+                  print(f"WARN: {path}: {e}")
+
+          if issues:
+              for i in issues:
+                  print(f"::warning::{i}")
+          else:
+              print(f"All certificates have renewBefore >= {WARNING_DAYS}d ✓")
+          EOF
+
+  # -------------------------------------------------------------------------
+  # SBOM generation
+  # -------------------------------------------------------------------------
+  sbom:
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.run_id }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Security summary
+  # -------------------------------------------------------------------------
+  summary:
+    name: Security Summary
+    needs: [trivy-images, trivy-fs, checkov, cert-expiry, sbom]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Write summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Images | ${{ needs.trivy-images.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Filesystem | ${{ needs.trivy-fs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov IaC | ${{ needs.checkov.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cert Expiry | ${{ needs.cert-expiry.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SBOM | ${{ needs.sbom.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Results uploaded to [Security tab](../../security/code-scanning)" >> $GITHUB_STEP_SUMMARY

@@ -42,15 +42,8 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes {
-    host                   = module.kubernetes_cluster.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.kubernetes_cluster.cluster_ca_certificate)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
-    }
-  }
+  # In Helm provider v3+, kubernetes config is inherited from the kubernetes provider.
+  # No inline kubernetes {} block is supported.
 }
 
 locals {
@@ -130,26 +123,27 @@ module "postgresql" {
 # ── Helm: lakehouse-core ──────────────────────────────────────────────────────
 resource "helm_release" "lakehouse_core" {
   name             = "lakehouse-core"
-  chart            = "${path.module}/../../helm/charts/lakehouse-core"
+  chart            = "${path.module}/../../../helm/charts/lakehouse-core"
   namespace        = "lakehouse-system"
   create_namespace = true
   timeout          = 600
   wait             = true
 
   values = [
-    file("${path.module}/../../helm/charts/lakehouse-core/values.yaml"),
-    file("${path.module}/../../helm/charts/lakehouse-core/values.staging.yaml")
+    file("${path.module}/../../../helm/charts/lakehouse-core/values.yaml"),
+    file("${path.module}/../../../helm/charts/lakehouse-core/values.staging.yaml")
   ]
 
-  set {
-    name  = "global.storageClass"
-    value = var.storage_class
-  }
-
-  set {
-    name  = "global.domain"
-    value = var.domain
-  }
+  set = [
+    {
+      name  = "global.storageClass"
+      value = var.storage_class
+    },
+    {
+      name  = "global.domain"
+      value = var.domain
+    }
+  ]
 
   depends_on = [module.kubernetes_cluster]
 }
@@ -157,19 +151,21 @@ resource "helm_release" "lakehouse_core" {
 # ── Helm: observability ───────────────────────────────────────────────────────
 resource "helm_release" "observability" {
   name             = "observability"
-  chart            = "${path.module}/../../helm/charts/observability"
+  chart            = "${path.module}/../../../helm/charts/observability"
   namespace        = "lakehouse-obs"
   create_namespace = true
   timeout          = 300
 
   values = [
-    file("${path.module}/../../helm/charts/observability/values.yaml")
+    file("${path.module}/../../../helm/charts/observability/values.yaml")
   ]
 
-  set {
-    name  = "global.storageClass"
-    value = var.storage_class
-  }
+  set = [
+    {
+      name  = "global.storageClass"
+      value = var.storage_class
+    }
+  ]
 
   depends_on = [helm_release.lakehouse_core]
 }

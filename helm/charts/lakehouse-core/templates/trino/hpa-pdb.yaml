@@ -60,7 +60,7 @@ metadata:
   labels:
     {{- include "lakehouse-core.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.trino.workers.pdb.minAvailable }}
+  minAvailable: {{ .Values.trino.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
       app.kubernetes.io/name: trino-worker

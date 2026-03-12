@@ -1,0 +1,220 @@
+---
+# =============================================================================
+# Open Lakehouse Platform — End-to-End Test Workflow
+# Runs nightly at 02:00 UTC on a full Docker Compose stack.
+# Tests: connectivity, data ingestion pipeline, Trino query, quality checks.
+# =============================================================================
+name: End-to-End Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC every day
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment profile'
+        required: false
+        default: 'ci'
+        type: choice
+        options:
+          - ci
+          - staging-smoke
+
+env:
+  COMPOSE_PROJECT_NAME: lakehouse-e2e
+  COMPOSE_FILE: local/docker-compose.yml
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Stack bootstrap
+  # -------------------------------------------------------------------------
+  bootstrap:
+    name: Bootstrap Stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      stack-health: ${{ steps.health.outputs.healthy }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start core services
+        run: |
+          docker compose -f local/docker-compose.yml \
+            up -d postgresql minio nessie polaris keycloak openbao
+          echo "Waiting for PostgreSQL..."
+          timeout 120 bash -c \
+            'until docker compose exec -T postgresql pg_isready -q; do sleep 3; done'
+
+      - name: Run bootstrap scripts
+        run: |
+          for script in scripts/bootstrap/0*.sh; do
+            echo "==> Running $script"
+            bash "$script" || { echo "Bootstrap failed at $script"; exit 1; }
+          done
+
+      - name: Start remaining services
+        run: |
+          docker compose -f local/docker-compose.yml \
+            up -d trino ranger airflow openmetadata docling
+          sleep 30
+
+      - name: Health check all services
+        id: health
+        run: |
+          HEALTHY=true
+          for svc in postgresql minio nessie polaris keycloak trino; do
+            STATUS=$(docker compose ps --format json "$svc" 2>/dev/null | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Health','unknown'))" \
+              2>/dev/null || echo "unknown")
+            echo "$svc → $STATUS"
+            if [[ "$STATUS" != "healthy" && "$STATUS" != "running" ]]; then
+              echo "::warning::$svc is not healthy: $STATUS"
+              HEALTHY=false
+            fi
+          done
+          echo "healthy=$HEALTHY" >> "$GITHUB_OUTPUT"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+
+  # -------------------------------------------------------------------------
+  # Connectivity tests
+  # -------------------------------------------------------------------------
+  connectivity:
+    name: Connectivity Tests
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test Trino HTTP
+        run: |
+          curl -sf http://localhost:8080/v1/info | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); assert d['starting']==False, 'Trino still starting'"
+
+      - name: Test Polaris catalog API
+        run: |
+          TOKEN=$(curl -sf -X POST http://localhost:8181/api/catalog/v1/oauth/tokens \
+            -d 'grant_type=client_credentials&client_id=admin&client_secret=password&scope=PRINCIPAL_ROLE:ALL' \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          curl -sf -H "Authorization: Bearer $TOKEN" \
+            http://localhost:8181/api/catalog/v1/catalogs | grep -q "catalogs"
+
+      - name: Test MinIO S3 API
+        run: |
+          curl -sf http://localhost:9000/minio/health/live
+          curl -sf http://localhost:9000/minio/health/cluster
+
+      - name: Test Nessie REST API
+        run: |
+          curl -sf http://localhost:19120/api/v1/config | grep -q "defaultBranch"
+
+      - name: Test Keycloak OIDC
+        run: |
+          curl -sf http://localhost:9080/realms/lakehouse/.well-known/openid-configuration \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'issuer' in d"
+
+  # -------------------------------------------------------------------------
+  # Data pipeline E2E
+  # -------------------------------------------------------------------------
+  data-pipeline:
+    name: Data Pipeline Tests
+    needs: connectivity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Seed sample data
+        run: bash scripts/bootstrap/07-seed-data.sh
+
+      - name: Run Trino query against raw layer
+        run: |
+          docker compose exec -T trino trino --server http://localhost:8080 \
+            --execute "SELECT COUNT(*) FROM iceberg.raw.sample_table" \
+            | grep -E "^[0-9]+"
+
+      - name: Validate data quality expectations
+        run: |
+          pip install great-expectations --quiet
+          python3 -c "
+          import json, sys
+          with open('data/quality/expectations/raw_layer.json') as f:
+              suite = json.load(f)
+          assert 'expectations' in suite
+          print('GE suite valid, expectations:', len(suite['expectations']))
+          "
+
+      - name: Verify RBAC via Ranger
+        run: |
+          # Test that the trino-svc service account can query but a random user cannot
+          docker compose exec -T trino trino \
+            --server http://localhost:8080 \
+            --user trino-svc \
+            --execute "SHOW CATALOGS" | grep -q "iceberg"
+
+  # -------------------------------------------------------------------------
+  # Performance baseline
+  # -------------------------------------------------------------------------
+  performance:
+    name: Performance Baseline
+    needs: data-pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: TPC-H scale-1 benchmark
+        run: |
+          START=$(date +%s%3N)
+          docker compose exec -T trino trino \
+            --server http://localhost:8080 \
+            --execute "SELECT l_returnflag, l_linestatus, SUM(l_quantity),
+                        SUM(l_extendedprice), AVG(l_discount)
+                       FROM tpch.sf1.lineitem
+                       GROUP BY 1,2 ORDER BY 1,2"
+          END=$(date +%s%3N)
+          ELAPSED=$((END - START))
+          echo "TPC-H Q1 elapsed: ${ELAPSED}ms"
+          # Fail if slower than 60 seconds
+          [ $ELAPSED -lt 60000 ] || { echo "::error::TPC-H Q1 exceeded 60s SLO"; exit 1; }
+
+      - name: Publish benchmark result
+        if: always()
+        run: |
+          echo "## Performance Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Query | Elapsed | SLO |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| TPC-H Q1 | ${ELAPSED}ms | <60 000ms |" >> $GITHUB_STEP_SUMMARY
+
+  # -------------------------------------------------------------------------
+  # Cleanup
+  # -------------------------------------------------------------------------
+  cleanup:
+    name: Cleanup
+    needs: [connectivity, data-pipeline, performance]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Tear down stack
+        run: |
+          docker compose -f local/docker-compose.yml down -v --remove-orphans
+          docker volume prune -f

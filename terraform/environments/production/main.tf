@@ -42,15 +42,8 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes {
-    host                   = module.kubernetes_cluster.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.kubernetes_cluster.cluster_ca_certificate)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
-    }
-  }
+  # In Helm provider v3+, kubernetes config is inherited from the kubernetes provider.
+  # No inline kubernetes {} block is supported.
 }
 
 locals {
@@ -132,7 +125,7 @@ module "postgresql" {
 # ── Helm: lakehouse-core ──────────────────────────────────────────────────────
 resource "helm_release" "lakehouse_core" {
   name             = "lakehouse-core"
-  chart            = "${path.module}/../../helm/charts/lakehouse-core"
+  chart            = "${path.module}/../../../helm/charts/lakehouse-core"
   namespace        = "lakehouse-system"
   create_namespace = true
   timeout          = 900
@@ -140,24 +133,24 @@ resource "helm_release" "lakehouse_core" {
   atomic           = true
 
   values = [
-    file("${path.module}/../../helm/charts/lakehouse-core/values.yaml"),
-    file("${path.module}/../../helm/charts/lakehouse-core/values.production.yaml")
+    file("${path.module}/../../../helm/charts/lakehouse-core/values.yaml"),
+    file("${path.module}/../../../helm/charts/lakehouse-core/values.production.yaml")
   ]
 
-  set {
-    name  = "global.storageClass"
-    value = var.storage_class
-  }
-
-  set {
-    name  = "global.domain"
-    value = var.domain
-  }
-
-  set {
-    name  = "openbao.autoUnseal.kmsKeyId"
-    value = var.kms_key_id
-  }
+  set = [
+    {
+      name  = "global.storageClass"
+      value = var.storage_class
+    },
+    {
+      name  = "global.domain"
+      value = var.domain
+    },
+    {
+      name  = "openbao.autoUnseal.kmsKeyId"
+      value = var.kms_key_id
+    }
+  ]
 
   depends_on = [module.kubernetes_cluster]
 }
@@ -165,7 +158,7 @@ resource "helm_release" "lakehouse_core" {
 # ── Helm: observability ───────────────────────────────────────────────────────
 resource "helm_release" "observability" {
   name             = "observability"
-  chart            = "${path.module}/../../helm/charts/observability"
+  chart            = "${path.module}/../../../helm/charts/observability"
   namespace        = "lakehouse-obs"
   create_namespace = true
   timeout          = 600
@@ -173,23 +166,23 @@ resource "helm_release" "observability" {
   atomic           = true
 
   values = [
-    file("${path.module}/../../helm/charts/observability/values.yaml")
+    file("${path.module}/../../../helm/charts/observability/values.yaml")
   ]
 
-  set {
-    name  = "global.storageClass"
-    value = var.storage_class
-  }
-
-  set {
-    name  = "prometheus.storage.size"
-    value = "500Gi"
-  }
-
-  set {
-    name  = "loki.storage.size"
-    value = "200Gi"
-  }
+  set = [
+    {
+      name  = "global.storageClass"
+      value = var.storage_class
+    },
+    {
+      name  = "prometheus.storage.size"
+      value = "500Gi"
+    },
+    {
+      name  = "loki.storage.size"
+      value = "200Gi"
+    }
+  ]
 
   depends_on = [helm_release.lakehouse_core]
 }

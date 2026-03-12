@@ -107,7 +107,7 @@ resource "google_sql_database_instance" "main" {
     ip_configuration {
       ipv4_enabled    = false
       private_network = var.gcp_network
-      require_ssl     = true
+      ssl_mode        = "ENCRYPTED_ONLY"
     }
 
     database_flags {

@@ -31,6 +31,12 @@ global:
   keycloakRealm: lakehouse
   keycloakUrl: "https://keycloak.lakehouse.local"
 
+  # MinIO S3-compatible endpoint used by Trino and other services
+  minioEndpoint: "http://minio.lakehouse-storage.svc.cluster.local:9000"
+
+  # Default S3 bucket name for the data lakehouse
+  lakehouseBucket: "lakehouse-data"
+
 # =============================================================================
 # Trino (query engine)
 # =============================================================================
@@ -60,6 +66,8 @@ trino:
 
     # JVM heap size (set to ~80% of memory limit)
     jvmHeapSize: "12G"
+    # JVM -Xmx flag passed via configmap (derived from jvmHeapSize)
+    jvmMaxHeap: "12G"
 
     # Readiness probe: HTTP GET /v1/info/state
     readinessProbe:
@@ -94,6 +102,8 @@ trino:
         memory: 16Gi
 
     jvmHeapSize: "12G"
+    # JVM -Xmx flag for worker JVM config
+    jvmMaxHeap: "12G"
 
   # PodDisruptionBudget: at least 2 workers must be available
   podDisruptionBudget:
@@ -115,9 +125,22 @@ trino:
     # Ranger Admin URL
     policyManagerUrl: "http://ranger-admin.lakehouse-data.svc.cluster.local:6080"
     serviceNamePrefix: "trino_lakehouse"
+    # Service name used in ranger-trino-security.xml
+    serviceName: "trino_lakehouse"
     # Shared secret injected from OpenBao via ESO
     existingSecret: trino-ranger-secret
     sharedSecretKey: plugin-shared-secret
+
+  # Catalog configuration
+  catalog:
+    # Apache Polaris REST catalog endpoint
+    polarisUri: "http://polaris.lakehouse-data.svc.cluster.local:8181/api/catalog"
+    # OIDC client used by Trino to authenticate to Polaris
+    polarisClientId: "trino-svc"
+    # OAuth2 scope for Polaris catalog access
+    polarisScope: "PRINCIPAL_ROLE:ALL"
+    # Project Nessie catalog endpoint
+    nessieUri: "http://nessie.lakehouse-data.svc.cluster.local:19120/api/v1"
 
   # Ingress for Trino HTTP UI
   ingress:
@@ -666,3 +689,286 @@ certManagerConfig:
   # Certificate duration and renewal
   duration: 2160h    # 90 days
   renewBefore: 720h  # Renew at 60 days (1/3 remaining)
+
+# =============================================================================
+# Additional values required by templates (normalized naming)
+# =============================================================================
+
+# Global additions
+global:
+  # cert-manager ClusterIssuer name (used in Ingress annotations)
+  certIssuer: openbao-issuer
+  # Default IngressClass for all Ingress resources
+  ingressClass: nginx
+  # Enable TLS on all Ingress resources
+  tls:
+    enabled: true
+
+# certManager full configuration block
+certManager:
+  enabled: true
+  acme:
+    email: platform@lakehouse.local
+  internalCA:
+    enabled: true
+    secretName: openbao-ca-secret
+
+# Trino Gateway additions (auth + database + ingress)
+trinoGateway:
+  database:
+    # PostgreSQL database for Trino Gateway routing state
+    name: trino_gateway
+  auth:
+    # K8s Secret (created by ESO) with Trino Gateway DB credentials
+    existingSecret: trino-gateway-db-secret
+  ingress:
+    # Hostname for Trino Gateway Ingress
+    host: trino-gateway.lakehouse.local
+    className: nginx
+
+# Trino ingress host
+trino:
+  ingress:
+    host: trino.lakehouse.local
+
+# Ranger normalized auth configuration
+ranger:
+  auth:
+    # K8s Secret with Ranger admin credentials (from ESO)
+    adminExistingSecret: ranger-admin-secret
+    # K8s Secret with Ranger DB credentials (from ESO)
+    dbExistingSecret: ranger-db-secret
+  database:
+    # PostgreSQL database name for Ranger
+    name: ranger
+
+# Keycloak normalized auth configuration
+keycloak:
+  auth:
+    # K8s Secret with Keycloak admin credentials (from ESO)
+    adminExistingSecret: keycloak-admin-secret
+    # K8s Secret with Keycloak DB credentials (from ESO)
+    dbExistingSecret: keycloak-db-secret
+  database:
+    name: keycloak
+  ingress:
+    host: keycloak.lakehouse.local
+    className: nginx
+  # Keycloak server log level
+  logLevel: INFO
+
+# MinIO normalized auth + distributed mode configuration
+minio:
+  auth:
+    # K8s Secret (from ESO) containing MinIO root credentials
+    existingSecret: minio-root-secret
+    # Key name for MINIO_ROOT_USER in the secret
+    rootUserKey: access_key
+    # Key name for MINIO_ROOT_PASSWORD in the secret
+    rootPasswordKey: secret_key
+  pdb:
+    # Minimum MinIO pods available during disruption (quorum for EC:2)
+    minAvailable: 2
+  # Number of data disks per MinIO pod (for erasure coding)
+  disksPerPod: 4
+  storage:
+    # PVC size per data disk
+    size: 500Gi
+  ingress:
+    # Hostname for MinIO Console (management UI)
+    consoleHost: minio-console.lakehouse.local
+  oidc:
+    # OIDC client for MinIO Console SSO via Keycloak
+    clientId: minio
+    # K8s Secret with OIDC client secret
+    existingSecret: minio-oidc-secret
+    clientSecretKey: client-secret
+
+# OpenBao additions (storage, lease TTL, auto-unseal)
+openbao:
+  storage:
+    # PVC size per Raft node
+    size: 10Gi
+  autoUnseal:
+    # AWS KMS region for auto-unseal (production only)
+    awsRegion: us-east-1
+    # AWS KMS key ID for auto-unseal (production only)
+    kmsKeyId: ""
+  # Default TTL for all leases
+  defaultLeaseTtl: "24h"
+  # Maximum TTL for all leases
+  maxLeaseTtl: "168h"
+
+# OpenMetadata normalized auth configuration
+openmetadata:
+  auth:
+    # K8s Secret with OpenMetadata DB credentials (from ESO)
+    dbExistingSecret: openmetadata-db-secret
+    # K8s Secret with Elasticsearch credentials (from ESO)
+    esExistingSecret: openmetadata-es-secret
+    # K8s Secret with JWT signing secret (from ESO)
+    jwtExistingSecret: openmetadata-jwt-secret
+  database:
+    name: openmetadata
+
+# Airflow normalized auth configuration
+airflow:
+  auth:
+    # K8s Secret with Airflow DB credentials (from ESO)
+    dbExistingSecret: airflow-db-secret
+    # K8s Secret with Fernet encryption key (from ESO)
+    fernetExistingSecret: airflow-fernet-secret
+    # K8s Secret with Redis password (from ESO)
+    redisExistingSecret: airflow-redis-secret
+    # K8s Secret with Airflow webserver secret key (from ESO)
+    webserverExistingSecret: airflow-webserver-secret
+  ingress:
+    host: airflow.lakehouse.local
+  workers:
+    # HPA-scaled Airflow Celery workers
+    replicas: 2
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+# Docling additions
+docling:
+  auth:
+    # K8s Secret with MinIO access credentials for Docling (from ESO)
+    existingSecret: docling-minio-secret
+  minio:
+    # MinIO bucket for document ingestion input/output
+    bucket: lakehouse-ingestion
+
+# PostgreSQL additions
+postgresql:
+  config:
+    # PostgreSQL work_mem parameter (per-sort memory)
+    workMem: "64MB"
+  primary:
+    storage:
+      # PVC size for primary PostgreSQL data volume
+      size: 100Gi
+
+# Global aliases and additions
+# global.certIssuer is the cert-manager ClusterIssuer name (alias for clusterIssuer)
+# global.ingressClass sets the IngressClass for all Ingress resources
+# global.tls.enabled controls TLS on all Ingress resources
+# These are referenced directly by templates:
+
+# ── certManager (full cert-manager configuration) ────────────────────────────
+certManager:
+  # Enable cert-manager ClusterIssuer and Certificate resources
+  enabled: true
+  # ACME (Let's Encrypt) settings — used in production with public domain
+  acme:
+    # Email for ACME registration and expiry notifications
+    email: platform@lakehouse.local
+  # Internal CA settings — used in staging via OpenBao PKI
+  internalCA:
+    enabled: true
+    # K8s Secret containing the CA cert/key for the ClusterIssuer
+    secretName: openbao-ca-secret
+
+# ── Trino Gateway additions ───────────────────────────────────────────────────
+# Additional values needed by trino-gateway/deployment.yaml template
+# trinoGateway.auth: injected credentials from ESO-created K8s Secret
+# trinoGateway.database: backend DB used to persist routing config
+# trinoGateway.ingress: host-based virtual hosting
+
+# ── Ranger normalized auth block ─────────────────────────────────────────────
+# ranger.auth.adminExistingSecret: K8s Secret with Ranger admin password
+# ranger.auth.dbExistingSecret: K8s Secret with Ranger DB credentials
+# ranger.database.name: PostgreSQL database name for Ranger
+
+# ── Keycloak normalized auth block ───────────────────────────────────────────
+# keycloak.auth.adminExistingSecret: K8s Secret with Keycloak admin creds
+# keycloak.auth.dbExistingSecret: K8s Secret with Keycloak DB credentials
+# keycloak.database.name: PostgreSQL database name for Keycloak
+# keycloak.logLevel: Log verbosity (INFO | WARN | DEBUG)
+
+# ── MinIO normalized auth block ──────────────────────────────────────────────
+# minio.auth.existingSecret: K8s Secret with MinIO root credentials
+# minio.auth.rootUserKey: key for MINIO_ROOT_USER in the secret
+# minio.auth.rootPasswordKey: key for MINIO_ROOT_PASSWORD in the secret
+# minio.pdb.minAvailable: minimum number of MinIO pods during disruptions
+# minio.disksPerPod: number of disks/PVCs per MinIO pod (distributed mode)
+# minio.storage.size: size of each PVC for data volumes
+# minio.ingress.consoleHost: hostname for MinIO Console Ingress
+# minio.oidc: OIDC config for MinIO Console login via Keycloak
+
+# ── OpenBao additions ─────────────────────────────────────────────────────────
+# openbao.storage.size: PVC size per Raft node (alias for persistence.size)
+# openbao.autoUnseal.awsRegion: AWS region for KMS auto-unseal
+# openbao.autoUnseal.kmsKeyId: AWS KMS key ID for auto-unseal
+# openbao.defaultLeaseTtl: Default TTL for all leases (e.g. "24h")
+# openbao.maxLeaseTtl: Maximum TTL for all leases (e.g. "168h")
+
+# ── OpenMetadata normalized auth block ───────────────────────────────────────
+# openmetadata.auth.dbExistingSecret: K8s Secret with DB credentials
+# openmetadata.auth.esExistingSecret: K8s Secret with Elasticsearch credentials
+# openmetadata.auth.jwtExistingSecret: K8s Secret with JWT signing secret
+# openmetadata.database.name: PostgreSQL database name for OpenMetadata
+
+# ── Airflow normalized auth block ─────────────────────────────────────────────
+# airflow.auth.dbExistingSecret: K8s Secret with Airflow DB credentials
+# airflow.auth.fernetExistingSecret: K8s Secret with Fernet encryption key
+# airflow.auth.redisExistingSecret: K8s Secret with Redis password
+# airflow.auth.webserverExistingSecret: K8s Secret with webserver secret key
+# airflow.ingress.host: hostname for Airflow UI Ingress
+# airflow.workers.*: HPA-scaled worker settings (alias for airflow.worker.*)
+
+# ── Docling additions ──────────────────────────────────────────────────────────
+# docling.auth.existingSecret: K8s Secret with MinIO access credentials
+# docling.minio.bucket: MinIO bucket name for document ingestion
+
+# ── PostgreSQL additions ───────────────────────────────────────────────────────
+# postgresql.config.workMem: PostgreSQL work_mem setting (e.g., "64MB")
+# postgresql.primary.storage.size: PVC size for primary data volume (alias)
+
+# Polaris additions (auth + realm + database name)
+polaris:
+  auth:
+    # K8s Secret (from ESO) with Polaris DB credentials
+    existingSecret: polaris-db-secret
+  database:
+    # PostgreSQL database name for Polaris
+    name: polaris
+  # Keycloak realm used by Polaris for token validation
+  realm: lakehouse
+
+# PostgreSQL additional auth and tuning config
+postgresql:
+  auth:
+    # K8s Secret (from ESO) with PostgreSQL superuser credentials
+    existingSecret: postgresql-root-secret
+  config:
+    # Number of allowed concurrent connections
+    maxConnections: 200
+    # Shared buffer pool size (25% of RAM recommended)
+    sharedBuffers: "1GB"
+    # Effective cache size (50-75% of RAM)
+    effectiveCacheSize: "3GB"
+    # Per-maintenance-operation memory limit
+    maintenanceWorkMem: "256MB"
+
+# openmetadata ingress host
+openmetadata:
+  ingress:
+    host: openmetadata.lakehouse.local
+    className: nginx
+
+# airflow ingress className
+airflow:
+  ingress:
+    className: nginx
+

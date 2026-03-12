@@ -21,56 +21,6 @@ maintainers:
   - name: Platform Team
     email: platform@lakehouse.local
 
-dependencies:
-  - name: trino
-    version: ">=0.1.0"
-    repository: "file://charts/trino"
-    condition: trino.enabled
-  - name: trino-gateway
-    version: ">=0.1.0"
-    repository: "file://charts/trino-gateway"
-    condition: trinoGateway.enabled
-  - name: polaris
-    version: ">=0.1.0"
-    repository: "file://charts/polaris"
-    condition: polaris.enabled
-  - name: ranger
-    version: ">=0.1.0"
-    repository: "file://charts/ranger"
-    condition: ranger.enabled
-  - name: openbao
-    version: ">=0.1.0"
-    repository: "file://charts/openbao"
-    condition: openbao.enabled
-  - name: keycloak
-    version: ">=0.1.0"
-    repository: "file://charts/keycloak"
-    condition: keycloak.enabled
-  - name: minio
-    version: ">=0.1.0"
-    repository: "file://charts/minio"
-    condition: minio.enabled
-  - name: postgresql
-    version: ">=0.1.0"
-    repository: "file://charts/postgresql"
-    condition: postgresql.enabled
-  - name: openmetadata
-    version: ">=0.1.0"
-    repository: "file://charts/openmetadata"
-    condition: openmetadata.enabled
-  - name: airflow
-    version: ">=0.1.0"
-    repository: "file://charts/airflow"
-    condition: airflow.enabled
-  - name: docling
-    version: ">=0.1.0"
-    repository: "file://charts/docling"
-    condition: docling.enabled
-  - name: external-secrets
-    version: ">=0.1.0"
-    repository: "file://charts/external-secrets"
-    condition: externalSecrets.enabled
-  - name: cert-manager-config
-    version: ">=0.1.0"
-    repository: "file://charts/cert-manager-config"
-    condition: certManagerConfig.enabled
+# All components are implemented as inline templates within this chart.
+# No external Helm sub-chart dependencies are required.
+# Components are toggled via values flags (e.g., trino.enabled, polaris.enabled).

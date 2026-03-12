@@ -283,7 +283,7 @@ data:
             labels:
               severity: warning
             annotations:
-              summary: "Pod en CrashLoop: {{ $labels.pod }}"
+              summary: "Pod en CrashLoop: {{`{{ $labels.pod }}`}}"
           - alert: PersistentVolumeFillingUp
             expr: |
               kubelet_volume_stats_available_bytes{namespace=~"lakehouse-.*"}
@@ -292,7 +292,7 @@ data:
             labels:
               severity: warning
             annotations:
-              summary: "PVC bientôt plein: {{ $labels.persistentvolumeclaim }}"
+              summary: "PVC bientôt plein: {{`{{ $labels.persistentvolumeclaim }}`}}"
 ---
 # Prometheus StatefulSet
 apiVersion: apps/v1

@@ -1,0 +1,74 @@
+{
+  "name": "raw_layer_checkpoint",
+  "config_version": 1.0,
+  "class_name": "SimpleCheckpoint",
+  "module_name": "great_expectations.checkpoint",
+  "run_name_template": "%Y%m%d-%H%M%S-raw-layer",
+  "expectation_suite_name": "raw_layer",
+  "action_list": [
+    {
+      "name": "store_validation_result",
+      "action": {
+        "class_name": "StoreValidationResultAction"
+      }
+    },
+    {
+      "name": "store_evaluation_params",
+      "action": {
+        "class_name": "StoreEvaluationParametersAction"
+      }
+    },
+    {
+      "name": "update_data_docs",
+      "action": {
+        "class_name": "UpdateDataDocsAction",
+        "site_names": []
+      }
+    },
+    {
+      "name": "send_slack_notification_on_failure",
+      "action": {
+        "class_name": "SlackNotificationAction",
+        "slack_webhook": "${SLACK_WEBHOOK_URL}",
+        "notify_on": "failure",
+        "notify_with": ["local_site"],
+        "renderer": {
+          "module_name": "great_expectations.render.renderer.slack_renderer",
+          "class_name": "SlackRenderer"
+        }
+      }
+    }
+  ],
+  "validations": [
+    {
+      "batch_request": {
+        "datasource_name": "iceberg_trino",
+        "data_connector_name": "default_inferred_data_connector_name",
+        "data_asset_name": "lakehouse.raw.events",
+        "data_connector_query": {
+          "index": -1
+        }
+      },
+      "expectation_suite_name": "raw_layer"
+    },
+    {
+      "batch_request": {
+        "datasource_name": "iceberg_trino",
+        "data_connector_name": "default_inferred_data_connector_name",
+        "data_asset_name": "lakehouse.raw.documents",
+        "data_connector_query": {
+          "index": -1
+        }
+      },
+      "expectation_suite_name": "raw_layer"
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "0.18.x",
+    "description": "Checkpoint for raw landing-zone Iceberg tables. Runs on every ingestion pipeline completion. Fails pipeline on quality gate breach.",
+    "layer": "raw",
+    "owner": "data-engineers",
+    "trigger": "post-ingestion",
+    "on_failure": "fail_pipeline"
+  }
+}

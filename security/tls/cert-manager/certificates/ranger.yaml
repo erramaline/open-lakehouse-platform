@@ -1,0 +1,28 @@
+##
+## cert-manager Certificate — Apache Ranger (Policy Management)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ranger-tls
+  namespace: lakehouse-data
+spec:
+  secretName: ranger-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  ranger.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - ranger
+    - ranger-admin
+    - ranger.lakehouse-data
+    - ranger.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

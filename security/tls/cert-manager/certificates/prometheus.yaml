@@ -1,0 +1,27 @@
+##
+## cert-manager Certificate — Prometheus (Metrics Collection)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: prometheus-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: prometheus-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  prometheus.lakehouse-obs.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - prometheus
+    - prometheus.lakehouse-obs
+    - prometheus.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

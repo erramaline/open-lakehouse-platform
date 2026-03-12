@@ -1,0 +1,27 @@
+##
+## cert-manager Certificate — Trino Gateway
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-gateway-tls
+  namespace: lakehouse-data
+spec:
+  secretName: trino-gateway-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  trino-gateway.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - trino-gateway
+    - trino-gateway.lakehouse-data
+    - trino-gateway.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

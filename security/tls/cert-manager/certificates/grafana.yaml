@@ -1,0 +1,27 @@
+##
+## cert-manager Certificate — Grafana (Dashboards & Alerting)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: grafana-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  grafana.lakehouse-obs.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - grafana
+    - grafana.lakehouse-obs
+    - grafana.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

@@ -1,0 +1,29 @@
+##
+## cert-manager Certificate — Trino Workers
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+## Wildcard SAN covers dynamic worker pods.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-workers-tls
+  namespace: lakehouse-data
+spec:
+  secretName: trino-workers-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  trino-worker.lakehouse-data.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - "*.trino-worker.lakehouse-data.svc.cluster.local"
+    - trino-worker-0.trino-worker.lakehouse-data.svc.cluster.local
+    - trino-worker-1.trino-worker.lakehouse-data.svc.cluster.local
+    - trino-worker-2.trino-worker.lakehouse-data.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

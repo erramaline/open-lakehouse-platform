@@ -1,0 +1,33 @@
+##
+## cert-manager Certificate — MinIO (Object Storage)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+## Wildcard SAN covers all MinIO distributed-mode nodes.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio-tls
+  namespace: lakehouse-storage
+spec:
+  secretName: minio-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  minio.lakehouse-storage.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - minio
+    - minio.lakehouse-storage
+    - minio.lakehouse-storage.svc.cluster.local
+    - "*.minio.lakehouse-storage.svc.cluster.local"
+    - minio-0.minio.lakehouse-storage.svc.cluster.local
+    - minio-1.minio.lakehouse-storage.svc.cluster.local
+    - minio-2.minio.lakehouse-storage.svc.cluster.local
+    - minio-3.minio.lakehouse-storage.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

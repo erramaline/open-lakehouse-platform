@@ -1,0 +1,32 @@
+##
+## cert-manager Certificate — OpenBao (Secrets Manager, Raft cluster)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+## Wildcard SAN + explicit pod SANs for Raft cluster nodes.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-tls
+  namespace: lakehouse-system
+spec:
+  secretName: openbao-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  openbao.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - openbao
+    - openbao.lakehouse-system
+    - openbao.lakehouse-system.svc.cluster.local
+    - "*.openbao.lakehouse-system.svc.cluster.local"
+    - openbao-0.openbao.lakehouse-system.svc.cluster.local
+    - openbao-1.openbao.lakehouse-system.svc.cluster.local
+    - openbao-2.openbao.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

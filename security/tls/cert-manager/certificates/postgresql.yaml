@@ -1,0 +1,31 @@
+##
+## cert-manager Certificate — PostgreSQL / PgBouncer
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+## Covers both the primary PostgreSQL instance and PgBouncer connection pooler.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgresql-tls
+  namespace: lakehouse-system
+spec:
+  secretName: postgresql-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  postgresql.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - postgresql
+    - postgresql.lakehouse-system
+    - postgresql.lakehouse-system.svc.cluster.local
+    - pgbouncer
+    - pgbouncer.lakehouse-system
+    - pgbouncer.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

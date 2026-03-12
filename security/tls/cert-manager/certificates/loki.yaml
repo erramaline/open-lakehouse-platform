@@ -1,0 +1,27 @@
+##
+## cert-manager Certificate — Loki (Log Aggregation)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: loki-tls
+  namespace: lakehouse-obs
+spec:
+  secretName: loki-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  loki.lakehouse-obs.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - loki
+    - loki.lakehouse-obs
+    - loki.lakehouse-obs.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

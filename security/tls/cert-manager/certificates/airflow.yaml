@@ -1,0 +1,28 @@
+##
+## cert-manager Certificate — Apache Airflow (Workflow Orchestrator)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: airflow-tls
+  namespace: lakehouse-ingest
+spec:
+  secretName: airflow-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  airflow.lakehouse-ingest.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - airflow
+    - airflow-webserver
+    - airflow.lakehouse-ingest
+    - airflow.lakehouse-ingest.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

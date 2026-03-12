@@ -1,0 +1,27 @@
+##
+## cert-manager Certificate — Elasticsearch (OpenMetadata search backend)
+## ADR-006: 90-day lifetime, autorenew at 30 days remaining.
+##
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: elasticsearch-tls
+  namespace: lakehouse-system
+spec:
+  secretName: elasticsearch-tls
+  duration:    2160h
+  renewBefore: 720h
+  commonName:  elasticsearch.lakehouse-system.svc.cluster.local
+  subject:
+    organizations: [OpenLakehouse]
+  dnsNames:
+    - elasticsearch
+    - elasticsearch.lakehouse-system
+    - elasticsearch.lakehouse-system.svc.cluster.local
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name:  openbao-issuer
+    kind:  ClusterIssuer
+    group: cert-manager.io

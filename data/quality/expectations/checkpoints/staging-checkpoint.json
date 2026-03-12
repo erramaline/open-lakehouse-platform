@@ -1,0 +1,92 @@
+{
+  "name": "staging_layer_checkpoint",
+  "config_version": 1.0,
+  "class_name": "SimpleCheckpoint",
+  "module_name": "great_expectations.checkpoint",
+  "run_name_template": "%Y%m%d-%H%M%S-staging-layer",
+  "expectation_suite_name": "staging_layer",
+  "action_list": [
+    {
+      "name": "store_validation_result",
+      "action": {
+        "class_name": "StoreValidationResultAction"
+      }
+    },
+    {
+      "name": "store_evaluation_params",
+      "action": {
+        "class_name": "StoreEvaluationParametersAction"
+      }
+    },
+    {
+      "name": "update_data_docs",
+      "action": {
+        "class_name": "UpdateDataDocsAction",
+        "site_names": []
+      }
+    },
+    {
+      "name": "send_slack_notification_on_failure",
+      "action": {
+        "class_name": "SlackNotificationAction",
+        "slack_webhook": "${SLACK_WEBHOOK_URL}",
+        "notify_on": "failure",
+        "notify_with": ["local_site"],
+        "renderer": {
+          "module_name": "great_expectations.render.renderer.slack_renderer",
+          "class_name": "SlackRenderer"
+        }
+      }
+    },
+    {
+      "name": "quarantine_failed_records",
+      "action": {
+        "class_name": "StoreValidationResultAction",
+        "target_store_name": "quarantine_store"
+      }
+    }
+  ],
+  "validations": [
+    {
+      "batch_request": {
+        "datasource_name": "iceberg_trino",
+        "data_connector_name": "default_inferred_data_connector_name",
+        "data_asset_name": "lakehouse.staging.events_cleaned",
+        "data_connector_query": {
+          "index": -1
+        }
+      },
+      "expectation_suite_name": "staging_layer"
+    },
+    {
+      "batch_request": {
+        "datasource_name": "iceberg_trino",
+        "data_connector_name": "default_inferred_data_connector_name",
+        "data_asset_name": "lakehouse.staging.documents_parsed",
+        "data_connector_query": {
+          "index": -1
+        }
+      },
+      "expectation_suite_name": "staging_layer"
+    },
+    {
+      "batch_request": {
+        "datasource_name": "iceberg_trino",
+        "data_connector_name": "default_inferred_data_connector_name",
+        "data_asset_name": "lakehouse.staging.entities_extracted",
+        "data_connector_query": {
+          "index": -1
+        }
+      },
+      "expectation_suite_name": "staging_layer"
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "0.18.x",
+    "description": "Checkpoint for staging-layer Iceberg tables after transformation. Runs post-dbt staging models. Validates referential integrity, deduplication, and business type constraints. Failed records are quarantined.",
+    "layer": "staging",
+    "owner": "data-engineers",
+    "trigger": "post-dbt-staging",
+    "on_failure": "quarantine_and_alert"
+  }
+}

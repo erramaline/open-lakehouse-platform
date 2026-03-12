@@ -314,7 +314,14 @@ trino-cli:  ## Connect to Trino via CLI
 psql:  ## Open psql connected to PostgreSQL
 	$(COMPOSE) exec postgresql psql -U postgres
 
-# ─── Validation deployment (Oracle Cloud Always Free) ───────────────────────────
+# ─── Git hooks ────────────────────────────────────────────────────────────────────
+.PHONY: setup-hooks
+setup-hooks:  ## Install shared git hooks (run once after cloning)
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit
+	@echo "$(GREEN)✓  Git hooks installed from .githooks/.$(RESET)"
+
+# ─── Validation deployment (Oracle Cloud Always Free) ───────────────────────
 .PHONY: validate-up
 validate-up:  ## Deploy full stack on a single ARM64 node (Oracle Cloud Always Free)
 	@echo "$(BOLD)$(GREEN)▶  Deploying validation stack on k3s...$(RESET)"

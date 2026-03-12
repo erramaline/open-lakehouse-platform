@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block .terraform/ files from being committed.
+# Install: make setup-hooks   (sets core.hooksPath to .githooks)
+set -euo pipefail
+
+if git diff --cached --name-only | grep -q "\.terraform/"; then
+  echo ""
+  echo "ERROR: Attempting to commit .terraform/ files."
+  echo "These are local Terraform working files and must never be stored in git."
+  echo ""
+  echo "To fix, run:"
+  echo "  git rm -r --cached \$(git ls-files | grep '\.terraform/')"
+  echo ""
+  exit 1
+fi

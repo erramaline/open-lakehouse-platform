@@ -304,6 +304,20 @@ make validate-dr
 
 ---
 
+## Contributing
+
+### First-time setup
+
+After cloning the repository, install the shared git hooks:
+
+```bash
+make setup-hooks
+```
+
+This configures git to use the hooks in `.githooks/` instead of the default `.git/hooks/`. The pre-commit hook prevents `.terraform/` files from being accidentally committed (provider binaries and downloaded modules are local working files and must stay out of version control).
+
+---
+
 ## License
 
 All platform configuration, documentation, and code in this repository is distributed under the **Apache License 2.0**, unless a specific file header indicates otherwise.

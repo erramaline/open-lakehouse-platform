@@ -1,0 +1,68 @@
+##
+## Alertmanager — routing configuration for Open Lakehouse Platform
+## Sends critical alerts to a Slack webhook; warning alerts suppressed in dev.
+##
+## Set ALERTMANAGER_SLACK_WEBHOOK in .env to activate Slack notifications.
+##
+
+global:
+  resolve_timeout:    5m
+  slack_api_url:      "${ALERTMANAGER_SLACK_WEBHOOK:-https://hooks.slack.com/services/REPLACE_ME}"
+
+# ─── Templates ────────────────────────────────────────────────────────────────
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# ─── Route tree ───────────────────────────────────────────────────────────────
+route:
+  # Default receiver — dev environment just logs
+  receiver:          dev-null
+  group_by:          ['alertname', 'job']
+  group_wait:        30s
+  group_interval:    5m
+  repeat_interval:   4h
+
+  routes:
+    # Critical alerts → Slack (if webhook configured)
+    - match:
+        severity: critical
+      receiver: slack-critical
+      group_wait:         10s
+      repeat_interval:    1h
+      continue:           false
+
+    # Warning alerts → dev-null in local dev (configure for real envs)
+    - match:
+        severity: warning
+      receiver: dev-null
+      group_wait:         2m
+      repeat_interval:    12h
+
+# ─── Receivers ────────────────────────────────────────────────────────────────
+receivers:
+
+  - name: dev-null
+    # No-op receiver — alerts are recorded but no notification sent.
+
+  - name: slack-critical
+    slack_configs:
+      - channel:       '#lakehouse-alerts'
+        send_resolved: true
+        title:         ':red_circle: {{ .GroupLabels.alertname }}'
+        text: |-
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Environment:* local dev
+          {{ range .Alerts }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ end }}
+
+# ─── Inhibition rules ─────────────────────────────────────────────────────────
+inhibit_rules:
+  # Suppress warnings for a service if a critical alert is already firing for it
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['job', 'instance']

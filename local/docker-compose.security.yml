@@ -1,0 +1,130 @@
+# =============================================================================
+# docker-compose.security.yml — Security-plane override
+# =============================================================================
+# Overlays on the main stack to:
+#   1. Add a one-shot TLS bootstrap container (calls 00-init-tls.sh)
+#   2. Increase OpenBao resource limits for crypto-heavy workloads
+#   3. Configure Keycloak with stricter settings
+#   4. Add a cert-monitor sidecar that alerts on expiring certs
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.security.yml up -d
+# =============================================================================
+
+name: lakehouse
+
+networks:
+  lakehouse-net:
+    external: true
+
+services:
+
+  # ─── One-shot TLS bootstrap (runs 00-init-tls.sh then exits) ────────────────
+  # Generates local CA + per-service certs into ./volumes/tls/
+  # Must complete BEFORE other services start in a secure deployment.
+  tls-bootstrap:
+    image: alpine:latest
+    hostname: tls-bootstrap
+    networks:
+      - lakehouse-net
+    volumes:
+      - ./volumes/tls:/output/tls
+      - ../scripts/bootstrap/00-init-tls.sh:/scripts/00-init-tls.sh:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache openssl bash
+        /scripts/00-init-tls.sh
+        echo "TLS bootstrap complete."
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  # ─── OpenBao: increase limits for crypto-heavy key operations ─────────────────
+  openbao-1:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+    # Enable mlock for production-like secret protection
+    cap_add:
+      - IPC_LOCK
+
+  openbao-2:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+    cap_add:
+      - IPC_LOCK
+
+  openbao-3:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+    cap_add:
+      - IPC_LOCK
+
+  # ─── Keycloak: production-grade session settings override ────────────────────
+  keycloak:
+    environment:
+      # Stricter session timeouts in security mode
+      KC_SPI_EVENTS_LISTENER_JBOSS_LOGGING_SUCCESS_LEVEL: info
+      KC_SPI_EVENTS_LISTENER_JBOSS_LOGGING_ERROR_LEVEL: error
+      # Enable HTTP/2 (requires TLS in real deployment; here for overlay compatibility)
+      KC_HTTP_RELATIVE_PATH: /
+      # Proxy header handling (when behind reverse proxy)
+      KC_PROXY_HEADERS: xforwarded
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  # ─── cert-monitor: watches ./volumes/tls/ and alerts on certs < 14 days expiry
+  cert-monitor:
+    image: alpine:latest
+    hostname: cert-monitor
+    networks:
+      - lakehouse-net
+    volumes:
+      - ./volumes/tls:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache openssl
+        while true; do
+          for cert in /certs/**/*.crt; do
+            if [ -f "$$cert" ]; then
+              expiry=$$(openssl x509 -noout -enddate -in "$$cert" | cut -d= -f2)
+              expiry_ts=$$(date -d "$$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$$expiry" +%s)
+              now=$$(date +%s)
+              diff_days=$$(( (expiry_ts - now) / 86400 ))
+              if [ "$$diff_days" -lt 14 ]; then
+                echo "ALERT: Certificate $$cert expires in $$diff_days days ($$expiry)"
+              fi
+            fi
+          done
+          sleep 3600  # Check every hour
+        done
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Apache Ranger 2.6.0 — ranger-ugsync-site.xml
+  Configures the User Group Synchronizer to pull users and groups from Keycloak.
+  Keycloak exposes a standard LDAP-compatible interface via the ldap-federation module.
+
+  Sync direction: Keycloak → Ranger (one-way; Ranger does NOT write to Keycloak)
+  Sync interval: 30 minutes (UGSYNC_SYNC_INTERVAL_IN_MINUTES)
+-->
+<configuration>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- SYNC SOURCE: LDAP (via Keycloak's built-in LDAP provider)          -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.usersync.source.impl.class</name>
+    <value>org.apache.ranger.ldapusersync.process.LdapUserGroupBuilder</value>
+  </property>
+
+  <!-- Keycloak LDAP URL (Keycloak embeds an LDAP server when federated) -->
+  <!-- NOTE: For local dev, Ranger polls Keycloak REST API directly.      -->
+  <!-- In production K8s, configure Keycloak LDAP federation.             -->
+  <property>
+    <name>ranger.usersync.ldap.url</name>
+    <value>ldap://keycloak:1389</value>
+  </property>
+
+  <!-- Bind credentials for Ranger to authenticate against Keycloak LDAP -->
+  <property>
+    <name>ranger.usersync.ldap.binddn</name>
+    <value>cn=admin,dc=lakehouse,dc=local</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.ldapbindpassword</name>
+    <value>${KEYCLOAK_ADMIN_PASSWORD}</value>
+  </property>
+
+  <!-- User search base -->
+  <property>
+    <name>ranger.usersync.ldap.user.searchbase</name>
+    <value>ou=users,dc=lakehouse,dc=local</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.user.objectclass</name>
+    <value>person</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.user.nameattribute</name>
+    <value>uid</value>
+  </property>
+
+  <!-- Group search base -->
+  <property>
+    <name>ranger.usersync.ldap.group.searchbase</name>
+    <value>ou=groups,dc=lakehouse,dc=local</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.group.objectclass</name>
+    <value>groupOfNames</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.group.nameattribute</name>
+    <value>cn</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.ldap.group.memberattributename</name>
+    <value>member</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- SYNC SCHEDULE                                                        -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.usersync.sleeptimeinmillisbetweensynccycle</name>
+    <!-- 30 minutes -->
+    <value>1800000</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- RANGER ADMIN TARGET                                                  -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.usersync.policymanager.baseURL</name>
+    <value>http://ranger-admin:6080</value>
+  </property>
+
+  <property>
+    <name>ranger.usersync.policymanager.password</name>
+    <value>${RANGER_ADMIN_PASSWORD}</value>
+  </property>
+
+</configuration>

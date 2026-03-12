@@ -1,0 +1,22 @@
+##
+## Grafana — Dashboard provider provisioning
+## Loads dashboards from local JSON files on startup.
+## Docs: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+##
+
+apiVersion: 1
+
+providers:
+
+  # ── Lakehouse Platform Dashboards ───────────────────────────────────────────
+  - name:            lakehouse
+    orgId:           1
+    folder:          Open Lakehouse Platform
+    folderUid:       lakehouse
+    type:            file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates:  true
+    options:
+      path:    /etc/grafana/dashboards
+      foldersFromFilesStructure: true

@@ -1,0 +1,156 @@
+##
+## Prometheus — scrape configuration for Open Lakehouse Platform
+## Scrape interval: 15s global, overridden per job as needed.
+##
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+  external_labels:
+    env:      local
+    platform: open-lakehouse
+
+# ─── Rule files ────────────────────────────────────────────────────────────────
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# ─── Alertmanager ─────────────────────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# ─── Scrape configs ────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9092']
+
+  # ── MinIO cluster ────────────────────────────────────────────────────────────
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets:
+          - minio-1:9000
+          - minio-2:9000
+          - minio-3:9000
+          - minio-4:9000
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # ── PostgreSQL (via postgres_exporter sidecar — exported on :9187) ──────────
+  # Note: postgres_exporter is not in this compose; use pgbouncer stats instead.
+  # Add postgres_exporter container if detailed DB metrics are required.
+
+  # ── OpenBao / Vault telemetry ─────────────────────────────────────────────
+  - job_name: openbao
+    metrics_path: /v1/sys/metrics
+    params:
+      format: ['prometheus']
+    bearer_token_file: /etc/prometheus/openbao-token
+    static_configs:
+      - targets:
+          - openbao-1:8200
+          - openbao-2:8200
+          - openbao-3:8200
+
+  # ── Trino JMX metrics (coordinator) ─────────────────────────────────────────
+  - job_name: trino-coordinator
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets: ['trino-coordinator:8080']
+
+  # ── Trino workers ─────────────────────────────────────────────────────────
+  - job_name: trino-workers
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets:
+          - trino-worker-1:8080
+          - trino-worker-2:8080
+          - trino-worker-3:8080
+
+  # ── Trino Gateway ────────────────────────────────────────────────────────────
+  - job_name: trino-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['trino-gateway:8081']
+
+  # ── Keycloak ──────────────────────────────────────────────────────────────────
+  - job_name: keycloak
+    metrics_path: /realms/master/metrics
+    static_configs:
+      - targets: ['keycloak:8080']
+
+  # ── Apache Ranger ─────────────────────────────────────────────────────────────
+  - job_name: ranger
+    metrics_path: /service/metrics/prometheus
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/ranger-password
+    static_configs:
+      - targets: ['ranger-admin:6080']
+
+  # ── Project Nessie ────────────────────────────────────────────────────────────
+  - job_name: nessie
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ['nessie:19120']
+
+  # ── Polaris (Dropwizard metrics → prometheus endpoint) ────────────────────
+  - job_name: polaris
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['polaris:8182']
+
+  # ── Elasticsearch ─────────────────────────────────────────────────────────────
+  - job_name: elasticsearch
+    metrics_path: /_prometheus/metrics
+    # Requires prometheus-elasticsearch-exporter. Use the built-in if available.
+    static_configs:
+      - targets: ['elasticsearch:9200']
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  - job_name: redis
+    # Requires redis_exporter sidecar. Placeholder for when added.
+    static_configs:
+      - targets: ['redis:9121']
+
+  # ── Airflow (StatsD → prometheus_multiproc_dir) ───────────────────────────
+  - job_name: airflow
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['airflow-webserver:8091']
+
+  # ── OpenMetadata ─────────────────────────────────────────────────────────────
+  - job_name: openmetadata
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['openmetadata-server:8585']
+
+  # ── Docling ───────────────────────────────────────────────────────────────────
+  - job_name: docling
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['docling-api:5001']
+
+  # ── Loki ──────────────────────────────────────────────────────────────────────
+  - job_name: loki
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['loki:3100']
+
+  # ── OTel Collector ────────────────────────────────────────────────────────────
+  - job_name: otel-collector
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['otel-collector:8888']
+
+  # ── Grafana ───────────────────────────────────────────────────────────────────
+  - job_name: grafana
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['grafana:3000']

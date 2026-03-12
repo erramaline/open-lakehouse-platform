@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ranger Trino Plugin — Security Configuration
+  Trino loads this file from /etc/trino/ranger-plugin/ranger-trino-security.xml
+  Must match the service name registered in Ranger Admin (RANGER_TRINO_SERVICE_NAME).
+
+  Reference: Apache Ranger 2.6.0 Trino Plugin Documentation
+-->
+<configuration xmlns:xi="http://www.w3.org/2001/XInclude">
+
+  <!-- Ranger Admin URL — all requests for policy evaluation go here -->
+  <property>
+    <name>ranger.plugin.trino.policy.source.impl</name>
+    <value>org.apache.ranger.admin.client.RangerAdminRESTClient</value>
+  </property>
+
+  <!-- Ranger service name for Trino — MUST match the name in Ranger Admin UI -->
+  <property>
+    <name>ranger.plugin.trino.service.name</name>
+    <value>${RANGER_TRINO_SERVICE_NAME}</value>
+  </property>
+
+  <!-- Ranger Admin endpoint -->
+  <property>
+    <name>ranger.plugin.trino.policy.rest.url</name>
+    <value>${RANGER_URL}</value>
+  </property>
+
+  <!-- Policy polling interval (30s — must align with Trino metadata cache TTL) -->
+  <property>
+    <name>ranger.plugin.trino.policy.pollIntervalMs</name>
+    <value>30000</value>
+  </property>
+
+  <!-- Cache directory for offline/fallback policy -->
+  <property>
+    <name>ranger.plugin.trino.policy.cache.dir</name>
+    <value>/var/trino/ranger-cache</value>
+  </property>
+
+  <!-- Credentials for Ranger Admin (service account) -->
+  <property>
+    <name>ranger.plugin.trino.policy.rest.ssl.config.file</name>
+    <value></value>
+  </property>
+
+  <!-- Enable deny policies (deny-first evaluation order) -->
+  <property>
+    <name>ranger.plugin.trino.use.default.policy.access</name>
+    <value>false</value>
+  </property>
+
+  <!-- Deny all access if Ranger Admin is unreachable (fail-closed) -->
+  <property>
+    <name>ranger.plugin.trino.access.failurePolicyAction</name>
+    <value>DENY</value>
+  </property>
+
+  <!-- Enable row-level filtering -->
+  <property>
+    <name>ranger.plugin.trino.filter.data.access</name>
+    <value>true</value>
+  </property>
+
+  <!-- Enable column masking -->
+  <property>
+    <name>ranger.plugin.trino.mask.data.access</name>
+    <value>true</value>
+  </property>
+
+  <!-- Ranger admin username (service account) -->
+  <property>
+    <name>ranger.plugin.trino.policy.rest.user</name>
+    <value>rangeradmin</value>
+  </property>
+
+  <!-- Ranger admin password (injected via env; NOT placed here — use env substitution) -->
+  <!-- NOTE: In production K8s, ESO syncs this from OpenBao to a K8s Secret.
+       For local dev, set RANGER_ADMIN_PASSWORD in .env -->
+  <property>
+    <name>ranger.plugin.trino.policy.rest.password</name>
+    <value>${RANGER_ADMIN_PASSWORD}</value>
+  </property>
+
+</configuration>

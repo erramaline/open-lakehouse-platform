@@ -1,0 +1,225 @@
+{
+  "realm": "lakehouse",
+  "enabled": true,
+  "displayName": "Open Lakehouse Platform",
+  "displayNameHtml": "<b>Open Lakehouse Platform</b>",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 10,
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "data-engineer",
+        "description": "Full read/write on raw, staging, curated buckets; can create Airflow DAGs; cannot manage users or policies"
+      },
+      {
+        "name": "data-analyst",
+        "description": "Read-only on curated Iceberg tables via Trino; no access to raw/staging; no PII columns"
+      },
+      {
+        "name": "data-steward",
+        "description": "Manages data quality rules, OpenMetadata governance workflows; read on all layers"
+      },
+      {
+        "name": "platform-admin",
+        "description": "Full platform access — manages Ranger policies, Keycloak users, infrastructure"
+      }
+    ]
+  },
+
+  "groups": [
+    { "name": "data-engineers",  "realmRoles": ["data-engineer"] },
+    { "name": "data-analysts",   "realmRoles": ["data-analyst"] },
+    { "name": "data-stewards",   "realmRoles": ["data-steward"] },
+    { "name": "platform-admins", "realmRoles": ["platform-admin"] }
+  ],
+
+  "users": [
+    {
+      "username": "alice.engineer",
+      "email": "alice.engineer@lakehouse.local",
+      "firstName": "Alice",
+      "lastName": "Engineer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "change_me_alice_pw", "temporary": false }],
+      "groups": ["data-engineers"],
+      "attributes": { "tenant_id": ["tenant-acme"] }
+    },
+    {
+      "username": "bob.analyst",
+      "email": "bob.analyst@lakehouse.local",
+      "firstName": "Bob",
+      "lastName": "Analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "change_me_bob_pw", "temporary": false }],
+      "groups": ["data-analysts"],
+      "attributes": { "tenant_id": ["tenant-acme"] }
+    },
+    {
+      "username": "carol.steward",
+      "email": "carol.steward@lakehouse.local",
+      "firstName": "Carol",
+      "lastName": "Steward",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "change_me_carol_pw", "temporary": false }],
+      "groups": ["data-stewards"],
+      "attributes": { "tenant_id": ["tenant-acme"] }
+    },
+    {
+      "username": "dave.admin",
+      "email": "dave.admin@lakehouse.local",
+      "firstName": "Dave",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "change_me_dave_pw", "temporary": false }],
+      "groups": ["platform-admins"],
+      "attributes": { "tenant_id": ["tenant-internal"] }
+    },
+    {
+      "username": "eve.steward",
+      "email": "eve.steward@lakehouse.local",
+      "firstName": "Eve",
+      "lastName": "Steward",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "change_me_eve_pw", "temporary": false }],
+      "groups": ["data-stewards"],
+      "attributes": { "tenant_id": ["tenant-beta"] }
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "trino",
+      "name": "Trino SQL Engine",
+      "description": "Service account for Trino Gateway JWT validation",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "secret": "${KEYCLOAK_TRINO_CLIENT_SECRET}",
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "tenant_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "airflow",
+      "name": "Apache Airflow",
+      "description": "Airflow webserver OIDC login (Authorization Code + PKCE)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${KEYCLOAK_AIRFLOW_CLIENT_SECRET}",
+      "redirectUris": ["http://localhost:8090/*", "http://airflow-webserver:8090/*"],
+      "webOrigins": ["http://localhost:8090", "http://airflow-webserver:8090"]
+    },
+    {
+      "clientId": "openmetadata",
+      "name": "OpenMetadata",
+      "description": "OpenMetadata server OIDC login",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${KEYCLOAK_OPENMETADATA_CLIENT_SECRET}",
+      "redirectUris": ["http://localhost:8585/*", "http://openmetadata-server:8585/*"],
+      "webOrigins": ["http://localhost:8585", "http://openmetadata-server:8585"]
+    },
+    {
+      "clientId": "grafana",
+      "name": "Grafana",
+      "description": "Grafana OIDC login",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "secret": "${KEYCLOAK_GRAFANA_CLIENT_SECRET}",
+      "redirectUris": ["http://localhost:3000/*", "http://grafana:3000/*"],
+      "webOrigins": ["http://localhost:3000", "http://grafana:3000"]
+    },
+    {
+      "clientId": "minio",
+      "name": "MinIO Console",
+      "description": "MinIO console OIDC login",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "secret": "${KEYCLOAK_MINIO_CLIENT_SECRET}",
+      "redirectUris": ["http://localhost:9001/*", "http://minio-1:9001/*"],
+      "webOrigins": ["http://localhost:9001", "http://minio-1:9001"]
+    }
+  ],
+
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xContentTypeOptions": "nosniff",
+    "xFrameOptions": "SAMEORIGIN",
+    "xRobotsTag": "none",
+    "xXSSProtection": "1; mode=block",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
+
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1)"
+}

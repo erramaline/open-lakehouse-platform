@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ranger Trino Plugin — Audit Configuration
+  Controls where Ranger audit events are written.
+  Audit events go to Solr (queryable via Ranger UI) AND to stdout (for OTel pickup).
+-->
+<configuration xmlns:xi="http://www.w3.org/2001/XInclude">
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- SOLR AUDIT DESTINATION                                              -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>xasecure.audit.destination.solr</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>xasecure.audit.destination.solr.urls</name>
+    <value>http://solr:8983/solr/ranger_audits</value>
+  </property>
+
+  <!-- Batch audit events for efficiency -->
+  <property>
+    <name>xasecure.audit.destination.solr.batch.filespool.dir</name>
+    <value>/var/trino/ranger-audit-spool</value>
+  </property>
+
+  <property>
+    <name>xasecure.audit.destination.solr.batch.size</name>
+    <value>100</value>
+  </property>
+
+  <property>
+    <name>xasecure.audit.destination.solr.batch.interval.ms</name>
+    <value>1000</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- LOG4J / STDOUT AUDIT DESTINATION (picked up by Promtail → Loki)    -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>xasecure.audit.destination.log4j</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>xasecure.audit.destination.log4j.logger</name>
+    <value>xaaudit</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- GENERAL AUDIT SETTINGS                                              -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <!-- Enable audit for all access (allowed + denied) -->
+  <property>
+    <name>xasecure.audit.is.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- Include query text in audit records (needed for GDPR article 30 compliance) -->
+  <property>
+    <name>xasecure.audit.trino.query.audit</name>
+    <value>true</value>
+  </property>
+
+  <!-- Async audit flush to avoid blocking query execution -->
+  <property>
+    <name>xasecure.audit.provider.summary.enabled</name>
+    <value>false</value>
+  </property>
+
+</configuration>

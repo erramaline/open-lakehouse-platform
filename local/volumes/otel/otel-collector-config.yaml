@@ -1,0 +1,149 @@
+receivers:
+  # ─── OTLP gRPC (from Trino, Airflow, Nessie, Polaris) ─────────────────────
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ─── Prometheus scrape (pull metrics from services exposing /metrics) ────────
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: trino
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["trino-coordinator:8080"]
+          metrics_path: /v1/info
+          # Trino exposes JMX via Prometheus JMX exporter on port 9090
+          # (configured via jvm.config if JMX exporter is enabled)
+
+        - job_name: minio
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["minio-1:9000"]
+          metrics_path: /minio/v2/metrics/cluster
+          bearer_token: "${MINIO_ROOT_PASSWORD}"
+
+        - job_name: nessie
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["nessie:19120"]
+          metrics_path: /q/metrics
+
+        - job_name: polaris
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["polaris:8182"]
+          metrics_path: /healthcheck
+
+        - job_name: ranger-admin
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["ranger-admin:6080"]
+
+        - job_name: openbao
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["openbao-1:8200", "openbao-2:8200", "openbao-3:8200"]
+          metrics_path: /v1/sys/metrics
+          params:
+            format: ["prometheus"]
+
+        - job_name: postgresql
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["postgresql:9187"]  # via postgres_exporter sidecar
+
+        - job_name: otel-collector-self
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["otel-collector:8888"]
+
+processors:
+  # ─── Batch for efficiency ─────────────────────────────────────────────────
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  # ─── Memory limiter (prevent OOM) ─────────────────────────────────────────
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # ─── Resource attributes (add cluster context to all signals) ─────────────
+  resource:
+    attributes:
+      - action: insert
+        key: deployment.environment
+        value: local
+      - action: insert
+        key: service.namespace
+        value: lakehouse
+
+  # ─── Log transformation (extract JSON fields from audit logs) ─────────────
+  transform/audit_logs:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["audit.event.type"], ParseJSON(body)["event_type"]) where IsString(body)
+
+exporters:
+  # ─── Prometheus remote_write (push to Prometheus) ─────────────────────────
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+
+  # ─── Loki (logs export) ───────────────────────────────────────────────────
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+
+  # ─── Debug exporter (local dev — logs all telemetry to stdout) ────────────
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Traces from all services
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]
+      # In K8s: add Tempo exporter here
+
+    # Metrics from all services
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheusremotewrite, debug]
+
+    # Logs — route audit logs to Loki (and eventually MinIO WORM via a separate pipeline)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform/audit_logs, batch]
+      exporters: [loki, debug]
+
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+    logs:
+      level: info

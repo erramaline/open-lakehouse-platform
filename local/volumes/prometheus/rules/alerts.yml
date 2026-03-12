@@ -1,0 +1,129 @@
+##
+## Prometheus alert rules — Open Lakehouse Platform (local dev)
+##
+
+groups:
+
+  # ─── Service availability ──────────────────────────────────────────────────
+  - name: service_availability
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary:     "Service {{ $labels.job }} ({{ $labels.instance }}) is DOWN"
+          description: "{{ $labels.job }} has been unreachable for 2+ minutes."
+
+  # ─── MinIO ────────────────────────────────────────────────────────────────
+  - name: minio
+    rules:
+      - alert: MinioOfflineNodes
+        expr: minio_cluster_nodes_offline_count > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "MinIO has {{ $value }} offline node(s)"
+          description: "MinIO cluster degraded — check minio-{1..4} containers."
+
+      - alert: MinioHighDiskUsage
+        expr: (minio_cluster_usage_total_bytes / minio_cluster_capacity_usable_total_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "MinIO disk usage above 85%"
+          description: "MinIO is at {{ $value | humanizePercentage }} capacity. Add more disk or clean up."
+
+  # ─── Trino ────────────────────────────────────────────────────────────────
+  - name: trino
+    rules:
+      - alert: TrinoHighQueryFailureRate
+        expr: rate(trino_execution_executor_executor_failed_task_count_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "Trino task failure rate elevated"
+          description: "More than 5 Trino task failures per second in the past 5 minutes."
+
+      - alert: TrinoQueueOverflow
+        expr: trino_execution_scheduler_queue_queued_queries > 100
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "Trino query queue depth > 100"
+          description: "Trino is queuing {{ $value }} queries. Scale up workers."
+
+  # ─── OpenBao ──────────────────────────────────────────────────────────────
+  - name: openbao
+    rules:
+      - alert: OpenBaoSealed
+        expr: vault_core_unsealed == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary:     "OpenBao node {{ $labels.instance }} is sealed"
+          description: "OpenBao Raft node is sealed and cannot serve secrets. Unseal immediately."
+
+  # ─── Keycloak ─────────────────────────────────────────────────────────────
+  - name: keycloak
+    rules:
+      - alert: KeycloakHighLoginErrors
+        expr: rate(keycloak_failed_login_attempts_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "Keycloak login failure rate elevated"
+          description: "More than 10 failed login attempts per second — possible brute-force attack."
+
+  # ─── Elasticsearch ────────────────────────────────────────────────────────
+  - name: elasticsearch
+    rules:
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary:     "Elasticsearch cluster status is RED"
+          description: "One or more primary shards are unassigned. Data may be lost."
+
+      - alert: ElasticsearchClusterYellow
+        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "Elasticsearch cluster status is YELLOW"
+          description: "Replica shards not assigned — cluster is degraded."
+
+  # ─── Airflow ──────────────────────────────────────────────────────────────
+  - name: airflow
+    rules:
+      - alert: AirflowHighFailedTaskCount
+        expr: airflow_ti_failures_total > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "Airflow task failure count above 20"
+          description: "{{ $value }} task failures detected. Inspect DAG runs in Airflow UI."
+
+  # ─── TLS certificate expiry ───────────────────────────────────────────────
+  - name: tls
+    rules:
+      - alert: TLSCertExpiringSoon
+        expr: ssl_certificate_expiry_seconds < 14 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary:     "TLS cert for {{ $labels.instance }} expires in < 14 days"
+          description: "Renew the certificate by running scripts/bootstrap/00-init-tls.sh."

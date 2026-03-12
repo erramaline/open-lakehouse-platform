@@ -1,0 +1,84 @@
+# =============================================================================
+# OpenMetadata 1.12.x — openmetadata.yaml
+# Full stack config: ElasticSearch, PostgreSQL, Keycloak OIDC, Airflow connector
+# =============================================================================
+
+# ─── Server ──────────────────────────────────────────────────────────────────
+server:
+  type: "HTTP"
+  applicationConnectors:
+    - type: "http"
+      port: 8585
+  adminConnectors:
+    - type: "http"
+      port: 8586
+  requestLog:
+    appenders:
+      - type: "console"
+
+# ─── Database — PostgreSQL via PgBouncer ─────────────────────────────────────
+database:
+  driverClass: "org.postgresql.Driver"
+  user: "${OPENMETADATA_DB_USER}"
+  password: "${OPENMETADATA_DB_PASSWORD}"
+  url: "jdbc:postgresql://pgbouncer:6432/${OPENMETADATA_DB}"
+
+# ─── ElasticSearch — Search index backend ────────────────────────────────────
+elasticsearch:
+  host: "elasticsearch"
+  port: 9200
+  scheme: "http"
+  username: "elastic"
+  password: "${ELASTIC_PASSWORD}"
+  # Index names (created on first boot)
+  clusterAlias: "lakehouse"
+  searchIndexMappingLanguage: "EN"
+  searchType: "ELASTIC_SEARCH"
+
+# ─── Authentication — Keycloak OIDC ──────────────────────────────────────────
+authenticationConfiguration:
+  provider: "custom-oidc"
+  authority: "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}"
+  clientId: "openmetadata"
+  callbackUrl: "http://openmetadata-server:8585/callback"
+  # JWKS endpoint for JWT validation
+  publicKeyUrls:
+    - "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
+
+authorizerConfiguration:
+  className: "org.openmetadata.service.security.DefaultAuthorizer"
+  containerRequestFilter: "org.openmetadata.service.security.JwtFilter"
+  adminPrincipals:
+    - "dave.admin"
+  principalDomain: "lakehouse.local"
+
+# ─── JWT configuration (for internal OpenMetadata tokens) ────────────────────
+jwtTokenConfiguration:
+  jwtissuer: "${OPENMETADATA_JWT_ISSUER}"
+  keyId: "Gb389A-9f76-gdjs-a92j-0242bk94356"
+  rsaprivateKeyFilePath: "${OPENMETADATA_PRIVATE_KEY_PATH}"
+  rsapublicKeyFilePath: "${OPENMETADATA_PUBLIC_KEY_PATH}"
+  jwtTokenExpiryTime: 3600
+
+# ─── Pipeline Service Client (Airflow) ───────────────────────────────────────
+pipelineServiceClientConfiguration:
+  className: "org.openmetadata.service.clients.pipeline.airflow.AirflowRESTClient"
+  apiEndpoint: "http://airflow-webserver:8090"
+  metadataApiEndpoint: "http://openmetadata-server:8585/api"
+  verifySSL: "no-ssl"
+
+# ─── Event Publisher (internal pub/sub) ──────────────────────────────────────
+eventHandlerConfiguration:
+  eventHandlerClassNames:
+    - "org.openmetadata.service.events.scheduled.ReportPublisher"
+    - "org.openmetadata.service.events.AuditEventPublisher"
+
+# ─── Search (ElasticSearch index rebuild) ────────────────────────────────────
+# searchConfiguration handled via elasticsearch block above
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+logging:
+  level: INFO
+  loggers:
+    "org.openmetadata": INFO
+    "io.dropwizard": WARN

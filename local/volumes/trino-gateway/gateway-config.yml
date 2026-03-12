@@ -1,0 +1,74 @@
+##
+## Trino Gateway — Backend routing configuration
+## Docs: https://trinodb.github.io/trino-gateway/
+##
+
+# ─── Routing configuration ─────────────────────────────────────────────────────
+routingManagerConfig:
+  name: RoundRobin
+
+# ─── Backends (Trino nodes) ────────────────────────────────────────────────────
+## Each backend corresponds to a Trino coordinator.
+## In this local setup a single coordinator is exposed; workers remain internal.
+
+backendState:
+  backends:
+    - name: trino-coordinator
+      proxyTo: http://trino-coordinator:8080
+      active: true
+      routingGroup: adhoc
+
+# ─── Request Router ────────────────────────────────────────────────────────────
+requestRouter:
+  port: 8080
+  name: trino-gateway
+  historySize: 1000
+  requestBufferSize: 16384
+
+# ─── Cluster Stats Monitor ─────────────────────────────────────────────────────
+clusterStatsConfiguration:
+  monitorType: INFO_API
+
+# ─── Database (state backend) ─────────────────────────────────────────────────
+## Trino Gateway stores routing history + backend state in PostgreSQL.
+dataStore:
+  jdbcUrl: jdbc:postgresql://pgbouncer:5432/trino_gateway
+  user: ${TRINO_GATEWAY_DB_USER}
+  password: ${TRINO_GATEWAY_DB_PASSWORD}
+  driver: org.postgresql.Driver
+
+# ─── Modules ───────────────────────────────────────────────────────────────────
+modules:
+  - io.trino.gateway.ha.module.HaGatewayProviderModule
+  - io.trino.gateway.ha.module.ClusterStateListenerModule
+  - io.trino.gateway.ha.module.ClusterStatsMonitorModule
+
+# ─── Managed apps ──────────────────────────────────────────────────────────────
+managedApps:
+  - io.trino.gateway.ha.GatewayManagedApp
+  - io.trino.gateway.ha.ClusterStateListenerManagedApp
+
+# ─── Authenticator (pass-through JWT from Keycloak) ──────────────────────────
+authentication:
+  default: OAUTH
+  oauth:
+    issuer: http://keycloak:8080/realms/lakehouse
+    clientId: trino
+    clientSecret: ${KEYCLOAK_TRINO_CLIENT_SECRET}
+    tokenEndpoint: http://keycloak:8080/realms/lakehouse/protocol/openid-connect/token
+    userIdField: preferred_username
+
+# ─── Server settings ───────────────────────────────────────────────────────────
+server:
+  applicationConnectors:
+    - type: http
+      port: 8080
+  adminConnectors:
+    - type: http
+      port: 8081
+
+# ─── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level: INFO
+  loggers:
+    io.trino.gateway: INFO

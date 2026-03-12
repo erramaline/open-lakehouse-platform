@@ -1,0 +1,129 @@
+##
+## Promtail — Docker log scraping for Open Lakehouse Platform
+## Scrapes container logs from the Docker daemon socket and ships to Loki.
+## Docs: https://grafana.com/docs/loki/latest/send-data/promtail/
+##
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level:        info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    backoff_config:
+      max_retries: 10
+      min_period:  1s
+      max_period:  30s
+    batch_size: 102400    # 100 KiB
+    batch_wait: 1s
+
+# ─── Scrape configs ───────────────────────────────────────────────────────────
+scrape_configs:
+
+  # ── Docker container logs ──────────────────────────────────────────────────
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          # Only scrape containers on the lakehouse network
+          - name:   network
+            values: ['open-lakehouse-platform_lakehouse-net']
+
+    relabel_configs:
+      # Use container name as the job label
+      - source_labels: ['__meta_docker_container_name']
+        regex:         '/(.*)'
+        target_label:  job
+
+      # Keep the container name as 'container' label
+      - source_labels: ['__meta_docker_container_name']
+        regex:         '/(.*)'
+        target_label:  container
+
+      # Extract compose service name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label:  service
+
+      # Extract compose project name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label:  compose_project
+
+      # Image tag as version label
+      - source_labels: ['__meta_docker_container_label_org_opencontainers_image_version']
+        target_label:  version
+
+      # Host label
+      - replacement:   "local"
+        target_label:  env
+
+    pipeline_stages:
+
+      # ── JSON log parsing (for services that emit JSON) ─────────────────────
+      - match:
+          selector: '{service=~"trino.*|keycloak|elasticsearch|openmetadata.*|airflow.*"}'
+          stages:
+            - json:
+                expressions:
+                  level:    level
+                  logger:   logger
+                  thread:   thread
+                  class:    class
+                  message:  message
+                  timestamp: timestamp
+            - labels:
+                level:
+                logger:
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+
+      # ── Ranger log parsing ───────────────────────────────────────────────
+      - match:
+          selector: '{service="ranger-admin"}'
+          stages:
+            - regex:
+                expression: '(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d+)\s+(?P<level>\w+)\s+\[(?P<thread>[^\]]+)\]\s+(?P<logger>\S+)\s+-\s+(?P<message>.*)'
+            - labels:
+                level:
+                logger:
+            - timestamp:
+                source: timestamp
+                format: '2006-01-02 15:04:05,000'
+
+      # ── MinIO log parsing ───────────────────────────────────────────────
+      - match:
+          selector: '{service=~"minio.*"}'
+          stages:
+            - json:
+                expressions:
+                  level:   level
+                  message: message
+                  api:     api.name
+                  bucket:  api.bucket
+                  object:  api.object
+            - labels:
+                level:
+                api:
+                bucket:
+
+      # ── Drop Prometheus scrape noise from Trino ───────────────────────
+      - match:
+          selector: '{service=~"trino.*"}'
+          stages:
+            - drop:
+                expression: '/metrics/prometheus'
+                drop_counter_reason: prometheus_scrape
+
+      # ── Structured metadata: add log level ────────────────────────────
+      - labeldrop:
+          - filename
+
+      # ── Deduplicate empty lines ───────────────────────────────────────
+      - drop:
+          expression: '^\s*$'
+          drop_counter_reason: empty_line

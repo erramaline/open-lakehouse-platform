@@ -1,0 +1,74 @@
+# =============================================================================
+# Apache Polaris 1.2.0 — Server Configuration (polaris-server.yml)
+# Dropwizard-based YAML configuration file.
+# Environment variables are interpolated by Dropwizard at startup.
+# =============================================================================
+
+server:
+  # REST catalog endpoint (Iceberg REST spec)
+  applicationConnectors:
+    - type: http
+      port: 8181
+
+  # Admin / management API
+  adminConnectors:
+    - type: http
+      port: 8182
+
+  # Request logging
+  requestLog:
+    appenders:
+      - type: console
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Persistence — PostgreSQL via JPA/EclipseLink
+# ─────────────────────────────────────────────────────────────────────────────
+metaStoreManager:
+  type: eclipse-link
+  conf:
+    javax.persistence.jdbc.driver: org.postgresql.Driver
+    javax.persistence.jdbc.url: jdbc:postgresql://pgbouncer:6432/${POLARIS_DB}
+    javax.persistence.jdbc.user: ${POLARIS_DB_USER}
+    javax.persistence.jdbc.password: ${POLARIS_DB_PASSWORD}
+    eclipselink.ddl-generation: create-or-extend-tables
+    eclipselink.target-database: PostgreSQL
+    eclipselink.logging.level: WARNING
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OAuth2 / Token service (Polaris issues short-lived tokens for credential vending)
+# ─────────────────────────────────────────────────────────────────────────────
+oauth2:
+  type: default
+  defaultToken:
+    # Token TTL for Polaris-issued credential vending tokens (Trino picks these up)
+    tokenLifetimeSeconds: 3600
+    tokenPassthroughEnabled: true
+  # Principal for bootstrapping Polaris admin (created by 04-init-polaris.sh)
+  initialDefaultPrincipalClientId: ${POLARIS_BOOTSTRAP_ADMIN_CLIENT_ID}
+  initialDefaultPrincipalClientSecret: ${POLARIS_BOOTSTRAP_ADMIN_SECRET}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature flags
+# ─────────────────────────────────────────────────────────────────────────────
+featureConfiguration:
+  # Disable forced credential rotation for local dev ease
+  ENFORCE_PRINCIPAL_CREDENTIAL_ROTATION_REQUIRED_CHECKING: false
+  # Allow Polaris to list all catalogs for the bootstrap principal
+  ALLOW_NAMESPACE_CREATION: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────────────────────────────────────
+logging:
+  level: INFO
+  loggers:
+    "org.apache.polaris": INFO
+    "org.eclipse.persistence": WARN
+    "io.quarkus": INFO
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Health check
+# ─────────────────────────────────────────────────────────────────────────────
+healthChecks:
+  - name: polaris-health
+    threshold: 1

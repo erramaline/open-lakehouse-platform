@@ -1,0 +1,54 @@
+##
+## Grafana — Datasource provisioning
+## Automatically configures Prometheus and Loki on startup.
+## Docs: https://grafana.com/docs/grafana/latest/administration/provisioning/
+##
+
+apiVersion: 1
+
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+  - name: Loki
+    orgId: 1
+
+datasources:
+
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  - name:      Prometheus
+    type:      prometheus
+    uid:       prometheus
+    orgId:     1
+    url:       http://prometheus:9092
+    access:    proxy
+    isDefault: true
+    jsonData:
+      httpMethod:          POST
+      timeInterval:        15s
+      queryTimeout:        60s
+      exemplarTraceIdDestinations:
+        - name:             trace_id
+          datasourceUid:    tempo
+          urlDisplayLabel:  View Trace
+    version:  1
+    editable: true
+
+  # ── Loki ─────────────────────────────────────────────────────────────────────
+  - name:      Loki
+    type:      loki
+    uid:       loki
+    orgId:     1
+    url:       http://loki:3100
+    access:    proxy
+    isDefault: false
+    jsonData:
+      maxLines:            1000
+      derivedFields:
+        # Extract trace IDs from Trino/Airflow logs and link to Grafana Tempo
+        - matcherRegex:    "traceID=([a-fA-F0-9]+)"
+          name:            TraceID
+          url:             "$${__value.raw}"
+          datasourceUid:   tempo
+          urlDisplayLabel: View Trace in Tempo
+    version:  1
+    editable: true

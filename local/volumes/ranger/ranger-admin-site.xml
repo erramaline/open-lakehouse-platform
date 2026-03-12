@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Apache Ranger 2.6.0 — ranger-admin-site.xml
+  Overrides and augments install.properties for the running Ranger Admin process.
+  Environment variables are resolved by the ranger process at startup.
+-->
+<configuration>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- DATABASE                                                             -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.jpa.jdbc.dialect</name>
+    <value>org.eclipse.persistence.platform.database.PostgreSQLPlatform</value>
+  </property>
+
+  <property>
+    <name>ranger.jpa.jdbc.driver</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+
+  <property>
+    <name>ranger.jpa.jdbc.url</name>
+    <value>jdbc:postgresql://pgbouncer:6432/${RANGER_DB}</value>
+  </property>
+
+  <property>
+    <name>ranger.jpa.jdbc.user</name>
+    <value>${RANGER_DB_USER}</value>
+  </property>
+
+  <property>
+    <name>ranger.jpa.jdbc.password</name>
+    <value>${RANGER_DB_PASSWORD}</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- AUDIT — Solr                                                         -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.audit.solr.urls</name>
+    <value>http://solr:8983/solr/ranger_audits</value>
+  </property>
+
+  <property>
+    <name>ranger.audit.solr.zookeepers</name>
+    <value>NONE</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- POLICY MANAGER                                                       -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.service.host</name>
+    <value>ranger-admin</value>
+  </property>
+
+  <property>
+    <name>ranger.service.http.port</name>
+    <value>6080</value>
+  </property>
+
+  <!-- Admin user (synced from Keycloak via UGSync) -->
+  <property>
+    <name>ranger.admin.auth.sso.enabled</name>
+    <value>false</value>
+  </property>
+
+  <!-- Password validation policy (local dev: relaxed) -->
+  <property>
+    <name>ranger.admin.password.validator.enabled</name>
+    <value>false</value>
+  </property>
+
+  <!-- Default policy for deny-first evaluation -->
+  <property>
+    <name>ranger.add.default.policy.on.service.create</name>
+    <value>false</value>
+  </property>
+
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- KEYCLOAK OIDC (future: enable SSO for Ranger UI)                    -->
+  <!-- NOTE: For local dev, Ranger uses its own admin password.            -->
+  <!--       In K8s, configure OIDC with Keycloak (see ADR-007).          -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+
+  <property>
+    <name>ranger.admin.auth.sso.providerurl</name>
+    <value>http://keycloak:8080/realms/lakehouse</value>
+  </property>
+
+  <property>
+    <name>ranger.admin.auth.sso.publickey</name>
+    <value>http://keycloak:8080/realms/lakehouse/protocol/openid-connect/certs</value>
+  </property>
+
+</configuration>

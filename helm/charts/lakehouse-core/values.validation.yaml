@@ -1,0 +1,340 @@
+# =============================================================================
+# values.validation.yaml — Oracle Cloud Always Free (4 OCPU / 24 GB ARM64)
+# =============================================================================
+#
+# Purpose: deploy the complete stack as a single-node cluster to validate
+#          all service connections without any HA overhead.
+#
+# Usage:
+#   helm install lakehouse ./helm/charts/lakehouse-core \
+#     --namespace lakehouse-system \
+#     --values helm/charts/lakehouse-core/values.yaml \
+#     --values helm/charts/lakehouse-core/values.validation.yaml \
+#     --timeout 10m --wait
+#
+# Rules applied everywhere:
+#   - replicaCount: 1
+#   - HPA:  autoscaling.enabled: false
+#   - PDB:  podDisruptionBudget.enabled: false
+#   - Anti-affinity / TopologySpreadConstraints: disabled
+# =============================================================================
+
+# =============================================================================
+# Trino
+# =============================================================================
+trino:
+  coordinator:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  workers:
+    replicas: 1
+    autoscaling:
+      enabled: false
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Trino Gateway
+# =============================================================================
+trinoGateway:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Apache Polaris
+# =============================================================================
+polaris:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Apache Ranger
+# =============================================================================
+ranger:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# OpenBao — single-node, file storage backend (no Raft HA)
+# =============================================================================
+openbao:
+  replicas: 1
+
+  ha:
+    enabled: false
+
+  storage:
+    type: file
+    file:
+      path: /openbao/data
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Keycloak
+# =============================================================================
+keycloak:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# MinIO — standalone mode (single node, single drive)
+# =============================================================================
+minio:
+  mode: standalone
+  replicas: 1
+  drivesPerNode: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  persistence:
+    size: 20Gi
+    # One PVC per pod in standalone mode
+    volumesPerServer: 1
+
+  pdb:
+    minAvailable: 0
+
+  disksPerPod: 1
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# PostgreSQL — primary only, no read replicas
+# =============================================================================
+postgresql:
+  primary:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    persistence:
+      size: 10Gi
+
+  readReplica:
+    enabled: false
+    replicas: 0
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# OpenMetadata
+# =============================================================================
+openmetadata:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Apache Airflow — LocalExecutor (no Redis, no Celery workers)
+# =============================================================================
+airflow:
+  executor: LocalExecutor
+
+  webserver:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  scheduler:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  # Workers disabled — LocalExecutor runs tasks inside the scheduler
+  worker:
+    replicas: 0
+    autoscaling:
+      enabled: false
+
+  workers:
+    replicas: 0
+    autoscaling:
+      enabled: false
+
+  # Redis not needed for LocalExecutor
+  redis:
+    enabled: false
+
+  podDisruptionBudget:
+    enabled: false
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Docling
+# =============================================================================
+docling:
+  replicas: 1
+
+  autoscaling:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  affinity: {}
+  topologySpreadConstraints: []
+
+# =============================================================================
+# Observability — minimal footprint
+# Disabled (save RAM, not required for connection validation):
+#   loki, promtail, otel-collector, alertmanager
+# Enabled (needed for connection validation):
+#   prometheus, grafana
+# =============================================================================
+loki:
+  enabled: false
+
+promtail:
+  enabled: false
+
+otelCollector:
+  enabled: false
+
+alertmanager:
+  enabled: false
+
+prometheus:
+  enabled: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+grafana:
+  enabled: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# cert-manager — keep enabled, use self-signed issuer
+# =============================================================================
+certManagerConfig:
+  enabled: true
+  # Self-signed issuer for validation (no external PKI required)
+  selfSigned: true
+  clusterIssuerName: selfsigned-issuer

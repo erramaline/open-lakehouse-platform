@@ -1,0 +1,38 @@
+# Terraform — never commit provider binaries, state or local overrides
+**/.terraform/providers/
+**/.terraform/plugins/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Local secrets / environment overrides
+local/.env
+*.env.local
+
+# Helm packaged charts
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp

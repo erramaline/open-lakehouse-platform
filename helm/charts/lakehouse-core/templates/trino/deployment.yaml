@@ -1,0 +1,241 @@
+{{- if .Values.trino.enabled }}
+---
+# Trino Coordinator Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-coordinator
+    app.kubernetes.io/component: coordinator
+spec:
+  replicas: {{ .Values.trino.coordinator.replicas }}
+  minReadySeconds: 10
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-coordinator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino-coordinator
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: coordinator
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/trino/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: trino
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: trino-coordinator
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: trino-coordinator
+      initContainers:
+        - name: wait-for-ranger
+          image: curlimages/curl:8.5.0
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://ranger-admin.lakehouse-data.svc.cluster.local:6080/service/public/api/servicedef; do
+                echo "Waiting for Ranger..."; sleep 5; done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: trino-coordinator
+          image: "{{ .Values.trino.image.repository }}:{{ .Values.trino.image.tag }}"
+          imagePullPolicy: {{ .Values.trino.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          env:
+            - name: TRINO_NODE_TYPE
+              value: coordinator
+            # OIDC client secret injected from K8s Secret (created by ESO)
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trino.oidc.existingSecret }}
+                  key: {{ .Values.trino.oidc.clientSecretKey }}
+            # Ranger plugin shared secret
+            - name: RANGER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trino.ranger.existingSecret }}
+                  key: {{ .Values.trino.ranger.sharedSecretKey }}
+          resources:
+            {{- toYaml .Values.trino.coordinator.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /v1/info/state
+              port: http
+            initialDelaySeconds: {{ .Values.trino.coordinator.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.trino.coordinator.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.trino.coordinator.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: http
+            initialDelaySeconds: {{ .Values.trino.coordinator.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.trino.coordinator.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.trino.coordinator.livenessProbe.failureThreshold }}
+          volumeMounts:
+            {{- include "lakehouse-core.tlsVolumeMount" . | nindent 12 }}
+            - name: config
+              mountPath: /etc/trino
+              readOnly: true
+            - name: catalog
+              mountPath: /etc/trino/catalog
+              readOnly: true
+            - name: ranger-plugin
+              mountPath: /etc/trino/ranger-plugin
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- include "lakehouse-core.tlsVolume" (dict "service" "trino-coordinator" "context" .) | nindent 8 }}
+        - name: config
+          configMap:
+            name: trino-coordinator-config
+        - name: catalog
+          configMap:
+            name: trino-catalog-config
+        - name: ranger-plugin
+          configMap:
+            name: trino-ranger-plugin-config
+        - name: tmp
+          emptyDir: {}
+---
+# Trino Workers Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-worker
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.trino.workers.replicas }}
+  minReadySeconds: 10
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/trino/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: trino
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: trino-worker
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: trino-worker
+      containers:
+        - name: trino-worker
+          image: "{{ .Values.trino.image.repository }}:{{ .Values.trino.image.tag }}"
+          imagePullPolicy: {{ .Values.trino.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: TRINO_NODE_TYPE
+              value: worker
+            - name: TRINO_COORDINATOR_URL
+              value: "http://trino-coordinator.lakehouse-data.svc.cluster.local:8080"
+          resources:
+            {{- toYaml .Values.trino.workers.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /v1/info/state
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            {{- include "lakehouse-core.tlsVolumeMount" . | nindent 12 }}
+            - name: config
+              mountPath: /etc/trino
+              readOnly: true
+            - name: catalog
+              mountPath: /etc/trino/catalog
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- include "lakehouse-core.tlsVolume" (dict "service" "trino-worker" "context" .) | nindent 8 }}
+        - name: config
+          configMap:
+            name: trino-worker-config
+        - name: catalog
+          configMap:
+            name: trino-catalog-config
+        - name: tmp
+          emptyDir: {}
+{{- end }}

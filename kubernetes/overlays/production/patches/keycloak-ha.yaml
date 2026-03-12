@@ -1,0 +1,19 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak
+  namespace: lakehouse-system
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: keycloak
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi

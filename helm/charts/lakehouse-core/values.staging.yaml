@@ -1,0 +1,155 @@
+# values.staging.yaml — Staging environment overrides
+# Reduced replicas and resource limits for cost efficiency
+# ============================================================
+
+global:
+  environment: staging
+  domain: lakehouse-staging.local
+  clusterIssuer: selfsigned-issuer
+
+trino:
+  coordinator:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
+    jvmHeapSize: "6G"
+  workers:
+    replicas: 2
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+    resources:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
+    jvmHeapSize: "6G"
+  podDisruptionBudget:
+    enabled: false
+
+trinoGateway:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+polaris:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  persistence:
+    size: 5Gi
+
+ranger:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  podDisruptionBudget:
+    enabled: false
+
+openbao:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    size: 5Gi
+  autoUnseal:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+keycloak:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+minio:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  persistence:
+    size: 50Gi
+    volumesPerServer: 1
+
+postgresql:
+  primary:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+    persistence:
+      size: 20Gi
+  readReplica:
+    enabled: false
+
+openmetadata:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  podDisruptionBudget:
+    enabled: false
+
+airflow:
+  webserver:
+    replicas: 1
+  scheduler:
+    replicas: 1
+  worker:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+docling:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
+externalSecrets:
+  refreshInterval: 15m

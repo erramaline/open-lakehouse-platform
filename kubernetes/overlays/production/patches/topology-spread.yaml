@@ -1,0 +1,13 @@
+---
+# TopologySpreadConstraints applied globally via namespace labels
+# This configmap documents the spread policy; actual constraints patched per workload above.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: topology-spread-policy
+  namespace: lakehouse-data
+data:
+  policy: |
+    maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway

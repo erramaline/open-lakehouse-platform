@@ -1,0 +1,20 @@
+---
+# MinIO: 4 servers distributed mode with erasure coding
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: lakehouse-storage
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+        - name: minio
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi

@@ -1,0 +1,668 @@
+# =============================================================================
+# values.yaml — Open Lakehouse Platform Core Chart
+# Every parameter is documented. Secrets are always injected via External
+# Secrets Operator (ESO) → K8s Secrets → secretKeyRef. Never plaintext.
+# =============================================================================
+
+# ── Global settings ────────────────────────────────────────────────────────────
+global:
+  # Environment name: staging | production
+  environment: staging
+
+  # Base domain for Ingress resources (e.g., lakehouse.example.com)
+  domain: lakehouse.local
+
+  # Image pull policy: Always | IfNotPresent | Never
+  imagePullPolicy: IfNotPresent
+
+  # Image pull secrets (list of secret names containing registry credentials)
+  imagePullSecrets: []
+
+  # Storage class for all PersistentVolumeClaims
+  storageClass: ""
+
+  # TLS: cert-manager cluster issuer name
+  clusterIssuer: openbao-issuer
+
+  # OpenBao address for External Secrets Operator
+  openbaoAddress: "http://openbao.lakehouse-system.svc.cluster.local:8200"
+
+  # Keycloak realm and OIDC issuer URL
+  keycloakRealm: lakehouse
+  keycloakUrl: "https://keycloak.lakehouse.local"
+
+# =============================================================================
+# Trino (query engine)
+# =============================================================================
+trino:
+  # Enable/disable this sub-chart
+  enabled: true
+
+  image:
+    repository: trinodb/trino
+    # Trino version pinned per version matrix in PLAN.md
+    tag: "479"
+    pullPolicy: IfNotPresent
+
+  # Coordinator configuration
+  coordinator:
+    # Number of coordinator replicas (2 for HA in production)
+    replicas: 2
+
+    resources:
+      requests:
+        # Minimum CPU guaranteed to coordinator
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        cpu: "4"
+        memory: 16Gi
+
+    # JVM heap size (set to ~80% of memory limit)
+    jvmHeapSize: "12G"
+
+    # Readiness probe: HTTP GET /v1/info/state
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 5
+
+    # Liveness probe: coordinator must respond within 30s
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      failureThreshold: 3
+
+  workers:
+    # Initial worker replica count (HPA will scale up/down)
+    replicas: 3
+
+    # HPA configuration
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      # Scale up when average CPU exceeds 70%
+      targetCPUUtilizationPercentage: 70
+
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        cpu: "4"
+        memory: 16Gi
+
+    jvmHeapSize: "12G"
+
+  # PodDisruptionBudget: at least 2 workers must be available
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # OIDC authentication via Keycloak
+  oidc:
+    enabled: true
+    # clientId and clientSecret are injected via ESO → k8s secret
+    clientId: trino
+    # Secret name created by ExternalSecret resource
+    existingSecret: trino-oidc-secret
+    clientSecretKey: client-secret
+
+  # Ranger authorization plugin
+  ranger:
+    enabled: true
+    # Ranger Admin URL
+    policyManagerUrl: "http://ranger-admin.lakehouse-data.svc.cluster.local:6080"
+    serviceNamePrefix: "trino_lakehouse"
+    # Shared secret injected from OpenBao via ESO
+    existingSecret: trino-ranger-secret
+    sharedSecretKey: plugin-shared-secret
+
+  # Ingress for Trino HTTP UI
+  ingress:
+    enabled: true
+    className: nginx
+    # TLS termination with cert-manager auto-issued cert
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+  # Config maps and catalogues are embedded in sub-chart templates
+
+# =============================================================================
+# Trino Gateway (load balancer + routing)
+# =============================================================================
+trinoGateway:
+  enabled: true
+
+  image:
+    repository: trinodb/trino-gateway
+    tag: "14"
+    pullPolicy: IfNotPresent
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  ingress:
+    enabled: true
+    className: nginx
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+# =============================================================================
+# Apache Polaris (Iceberg REST catalog)
+# =============================================================================
+polaris:
+  enabled: true
+
+  image:
+    repository: apache/polaris
+    tag: "1.2.0"
+    pullPolicy: IfNotPresent
+
+  # StatefulSet replicas
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  persistence:
+    enabled: true
+    # Size of PVC for Polaris persistence layer
+    size: 10Gi
+    storageClass: ""
+
+  # PostgreSQL backend credentials — injected from OpenBao
+  database:
+    # Name of K8s Secret created by ExternalSecret
+    existingSecret: polaris-db-secret
+    usernameKey: username
+    passwordKey: password
+    host: postgresql-rw.lakehouse-system.svc.cluster.local
+    port: 5432
+    name: polaris
+
+  # External Secrets configuration
+  externalSecret:
+    enabled: true
+    # OpenBao path: secret/data/db/postgres/polaris
+    vaultPath: "secret/data/db/postgres/polaris"
+
+# =============================================================================
+# Apache Ranger (authorization policy engine)
+# =============================================================================
+ranger:
+  enabled: true
+
+  image:
+    repository: apache/ranger
+    tag: "2.6.0"
+    pullPolicy: IfNotPresent
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  database:
+    existingSecret: ranger-db-secret
+    usernameKey: username
+    passwordKey: password
+    host: postgresql-rw.lakehouse-system.svc.cluster.local
+    port: 5432
+    name: ranger
+
+  externalSecret:
+    enabled: true
+    vaultPath: "secret/data/db/postgres/ranger"
+
+# =============================================================================
+# OpenBao (secret management — HashiCorp Vault API-compatible)
+# =============================================================================
+openbao:
+  enabled: true
+
+  image:
+    repository: openbao/openbao
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+
+  # 3-node Raft cluster for HA (1 in staging, 3 in production)
+  replicas: 3
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  persistence:
+    enabled: true
+    # Each node gets its own PVC for Raft data
+    size: 10Gi
+    storageClass: ""
+
+  # Auto-unseal configuration for production (cloud KMS)
+  # In staging: Shamir manual unseal
+  autoUnseal:
+    enabled: false
+    # provider: awskms | gcpckms | azurekeyvault
+    provider: awskms
+    awskms:
+      region: us-east-1
+      kmsKeyId: ""
+
+  # PodDisruptionBudget: Raft quorum requires 2/3 nodes up
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Headless service for Raft peer discovery
+  service:
+    api:
+      port: 8200
+    cluster:
+      port: 8201
+
+# =============================================================================
+# Keycloak (identity provider)
+# =============================================================================
+keycloak:
+  enabled: true
+
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "24.0"
+    pullPolicy: IfNotPresent
+
+  # StatefulSet replicas (2 for HA in production)
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  # Admin credentials — injected from OpenBao via ESO
+  admin:
+    existingSecret: keycloak-admin-secret
+    usernameKey: username
+    passwordKey: password
+
+  database:
+    existingSecret: keycloak-db-secret
+    usernameKey: username
+    passwordKey: password
+    host: postgresql-rw.lakehouse-system.svc.cluster.local
+    port: 5432
+    name: keycloak
+
+  externalSecret:
+    enabled: true
+    # Admin creds: secret/data/identity/keycloak/admin
+    adminVaultPath: "secret/data/identity/keycloak/admin"
+    # DB creds: secret/data/db/postgres/keycloak
+    dbVaultPath: "secret/data/db/postgres/keycloak"
+
+  ingress:
+    enabled: true
+    className: nginx
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+# =============================================================================
+# MinIO (object storage — distributed erasure coding mode)
+# =============================================================================
+minio:
+  enabled: true
+
+  image:
+    repository: quay.io/minio/minio
+    tag: "RELEASE.2025-01-20T14-49-07Z"
+    pullPolicy: IfNotPresent
+
+  # 4 replicas, distributed mode (EC:2 parity)
+  replicas: 4
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  # 4 PVCs per replica (16 volumes total for erasure coding)
+  persistence:
+    enabled: true
+    # Size per volume
+    size: 500Gi
+    storageClass: ""
+    volumesPerServer: 4
+
+  # Root credentials — injected from OpenBao
+  rootCredentials:
+    existingSecret: minio-root-secret
+    accessKeyKey: access_key
+    secretKeyKey: secret_key
+
+  externalSecret:
+    enabled: true
+    vaultPath: "secret/data/storage/minio/root"
+
+  ingress:
+    # Only MinIO Console exposed via Ingress (not S3 API)
+    enabled: true
+    className: nginx
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+# =============================================================================
+# PostgreSQL (primary + read replica with streaming replication)
+# =============================================================================
+postgresql:
+  enabled: true
+
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  primary:
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    persistence:
+      size: 100Gi
+      storageClass: ""
+
+  readReplica:
+    # Enable streaming replication read replica
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  # Superuser credentials injected from OpenBao
+  superuserSecret:
+    existingSecret: postgresql-root-secret
+    usernameKey: username
+    passwordKey: password
+
+  externalSecret:
+    enabled: true
+    vaultPath: "secret/data/postgresql/root"
+
+# =============================================================================
+# OpenMetadata (data catalog and metadata management)
+# =============================================================================
+openmetadata:
+  enabled: true
+
+  image:
+    repository: openmetadata/server
+    tag: "1.3.0"
+    pullPolicy: IfNotPresent
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  database:
+    existingSecret: openmetadata-db-secret
+    usernameKey: username
+    passwordKey: password
+    host: postgresql-rw.lakehouse-system.svc.cluster.local
+    port: 5432
+    name: openmetadata
+
+  elasticsearch:
+    existingSecret: openmetadata-es-secret
+    passwordKey: password
+    host: elasticsearch.lakehouse-system.svc.cluster.local
+    port: 9200
+
+  jwt:
+    existingSecret: openmetadata-jwt-secret
+    secretKey: secret
+
+  oidc:
+    enabled: true
+    existingSecret: openmetadata-oidc-secret
+    clientSecretKey: client-secret
+
+  externalSecret:
+    enabled: true
+    dbVaultPath: "secret/data/db/postgres/openmetadata"
+    esVaultPath: "secret/data/metadata/openmetadata/elasticsearch"
+    jwtVaultPath: "secret/data/metadata/openmetadata/jwt-secret"
+    oidcVaultPath: "secret/data/identity/keycloak/clients/openmetadata"
+
+  ingress:
+    enabled: true
+    className: nginx
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+# =============================================================================
+# Apache Airflow (workflow orchestration)
+# =============================================================================
+airflow:
+  enabled: true
+
+  image:
+    repository: apache/airflow
+    tag: "2.9.2"
+    pullPolicy: IfNotPresent
+
+  webserver:
+    # 2 replicas for HA webserver
+    replicas: 2
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  scheduler:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  worker:
+    # HPA: min=2 max=8 based on Celery queue depth
+    replicas: 2
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Fernet key and webserver secret — injected from OpenBao
+  fernetKey:
+    existingSecret: airflow-fernet-secret
+    secretKey: key
+
+  webserverSecretKey:
+    existingSecret: airflow-webserver-secret
+    secretKey: secret_key
+
+  database:
+    existingSecret: airflow-db-secret
+    usernameKey: username
+    passwordKey: password
+    host: postgresql-rw.lakehouse-system.svc.cluster.local
+    port: 5432
+    name: airflow
+
+  redis:
+    existingSecret: airflow-redis-secret
+    passwordKey: password
+
+  oidc:
+    enabled: true
+    existingSecret: airflow-oidc-secret
+    clientSecretKey: client-secret
+
+  externalSecret:
+    enabled: true
+    fernetVaultPath: "secret/data/ingestion/airflow/fernet-key"
+    webserverVaultPath: "secret/data/ingestion/airflow/webserver-secret"
+    dbVaultPath: "secret/data/db/postgres/airflow"
+    redisVaultPath: "secret/data/ingestion/airflow/redis"
+    oidcVaultPath: "secret/data/identity/keycloak/clients/airflow"
+
+  ingress:
+    enabled: true
+    className: nginx
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: openbao-issuer
+
+# =============================================================================
+# Docling (document ingestion worker)
+# =============================================================================
+docling:
+  enabled: true
+
+  image:
+    repository: ghcr.io/ds4sd/docling
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  # GPU support (optional — requires GPU node pool)
+  gpu:
+    enabled: false
+    # resourceName: nvidia.com/gpu
+    # count: 1
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+  minio:
+    existingSecret: docling-minio-secret
+    accessKeyKey: access_key
+    secretKeyKey: secret_key
+
+  externalSecret:
+    enabled: true
+    vaultPath: "secret/data/storage/minio/ingestion"
+
+# =============================================================================
+# External Secrets Operator (reads from OpenBao, creates K8s Secrets)
+# =============================================================================
+externalSecrets:
+  enabled: true
+
+  # ClusterSecretStore name (points to OpenBao)
+  secretStoreName: openbao-secret-store
+
+  # OpenBao K8s auth role for ESO
+  openbaoRole: external-secrets
+
+  # Refresh interval for all ExternalSecrets
+  refreshInterval: 5m
+
+# =============================================================================
+# cert-manager integration
+# =============================================================================
+certManagerConfig:
+  enabled: true
+
+  # ClusterIssuer name (OpenBao PKI backend)
+  clusterIssuerName: openbao-issuer
+
+  # Certificate duration and renewal
+  duration: 2160h    # 90 days
+  renewBefore: 720h  # Renew at 60 days (1/3 remaining)

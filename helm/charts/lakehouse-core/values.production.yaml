@@ -1,0 +1,203 @@
+# values.production.yaml — Production environment overrides
+# Full HA replicas, production resource limits, auto-unseal, anti-affinity
+# ============================================================
+
+global:
+  environment: production
+  domain: lakehouse.example.com
+  clusterIssuer: openbao-issuer
+
+trino:
+  coordinator:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "4"
+        memory: 16Gi
+      limits:
+        cpu: "8"
+        memory: 32Gi
+    jvmHeapSize: "24G"
+  workers:
+    replicas: 3
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+    resources:
+      requests:
+        cpu: "4"
+        memory: 16Gi
+      limits:
+        cpu: "8"
+        memory: 32Gi
+    jvmHeapSize: "24G"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+trinoGateway:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+polaris:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  persistence:
+    size: 50Gi
+
+ranger:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+openbao:
+  replicas: 3
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  persistence:
+    size: 50Gi
+  # Production: KMS auto-unseal (AWS KMS by default)
+  autoUnseal:
+    enabled: true
+    provider: awskms
+    awskms:
+      region: us-east-1
+      # Set kmsKeyId via --set or secrets management
+      kmsKeyId: ""
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+keycloak:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+minio:
+  replicas: 4
+  resources:
+    requests:
+      cpu: "4"
+      memory: 8Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+  persistence:
+    size: 2Ti
+    volumesPerServer: 4
+
+postgresql:
+  primary:
+    resources:
+      requests:
+        cpu: "4"
+        memory: 8Gi
+      limits:
+        cpu: "8"
+        memory: 16Gi
+    persistence:
+      size: 500Gi
+  readReplica:
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+
+openmetadata:
+  replicas: 2
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+airflow:
+  webserver:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+  scheduler:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+  worker:
+    replicas: 3
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+docling:
+  replicas: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+
+externalSecrets:
+  refreshInterval: 5m

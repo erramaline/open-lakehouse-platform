@@ -1,0 +1,20 @@
+---
+# OpenBao: 3-node Raft cluster in production
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openbao
+  namespace: lakehouse-system
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: openbao
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi

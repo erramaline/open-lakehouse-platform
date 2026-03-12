@@ -1,0 +1,149 @@
+{{- if .Values.ranger.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranger-admin
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ranger-admin
+spec:
+  replicas: {{ .Values.ranger.replicas }}
+  minReadySeconds: 10
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ranger-admin
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ranger-admin
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: ranger
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: ranger-admin
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: wait-for-db
+          image: postgres:16-alpine
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgresql.lakehouse-system.svc.cluster.local -p 5432; do sleep 2; done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: ranger-admin
+          image: "{{ .Values.ranger.image.repository }}:{{ .Values.ranger.image.tag }}"
+          imagePullPolicy: {{ .Values.ranger.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 6080
+              protocol: TCP
+          env:
+            - name: DB_HOST
+              value: postgresql.lakehouse-system.svc.cluster.local
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "{{ .Values.ranger.database.name }}"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ranger.auth.dbExistingSecret }}
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ranger.auth.dbExistingSecret }}
+                  key: password
+            - name: RANGER_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ranger.auth.adminExistingSecret }}
+                  key: adminUser
+            - name: RANGER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ranger.auth.adminExistingSecret }}
+                  key: adminPassword
+          resources:
+            {{- toYaml .Values.ranger.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /service/public/api/servicedef
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /service/public/api/servicedef
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranger-admin
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ranger-admin
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "6080"
+    prometheus.io/path: "/service/metrics"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 6080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: ranger-admin
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ranger-admin
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ranger-admin
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

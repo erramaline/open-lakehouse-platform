@@ -1,0 +1,473 @@
+{{- if .Values.grafana.enabled }}
+---
+# Grafana ConfigMap — datasources + dashboards
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: {{ .Values.grafana.datasources.prometheus.url }}
+        access: proxy
+        isDefault: true
+        jsonData:
+          timeInterval: {{ .Values.prometheus.scrapeInterval }}
+      - name: Loki
+        type: loki
+        url: {{ .Values.grafana.datasources.loki.url }}
+        access: proxy
+        jsonData:
+          maxLines: 5000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: lakehouse
+        orgId: 1
+        folder: Lakehouse
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+---
+# Dashboard: Trino
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-trino
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  trino.json: |
+    {
+      "title": "Trino — Lakehouse",
+      "uid": "trino-lakehouse",
+      "tags": ["lakehouse", "trino"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "stat", "title": "Queries actives",
+          "targets": [{"expr": "trino_QueryManager_RunningQueries", "legendFormat": "Running"}]
+        },
+        {
+          "id": 2, "type": "stat", "title": "Workers actifs",
+          "targets": [{"expr": "trino_ClusterMemoryPool_AssignedQueries", "legendFormat": "Workers"}]
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Taux de queries (5m)",
+          "targets": [
+            {"expr": "rate(trino_QueryManager_CompletedQueries_total[5m])", "legendFormat": "Completed"},
+            {"expr": "rate(trino_QueryManager_FailedQueries_total[5m])", "legendFormat": "Failed"}
+          ]
+        },
+        {
+          "id": 4, "type": "timeseries", "title": "Mémoire cluster",
+          "targets": [{"expr": "trino_ClusterMemoryPool_FreeBytes / 1e9", "legendFormat": "Free (GB)"}]
+        }
+      ]
+    }
+---
+# Dashboard: OpenBao
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-openbao
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  openbao.json: |
+    {
+      "title": "OpenBao — Secrets Manager",
+      "uid": "openbao-lakehouse",
+      "tags": ["lakehouse", "openbao", "security"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "stat", "title": "Statut nœuds",
+          "targets": [{"expr": "count(openbao_core_unsealed == 1)", "legendFormat": "Unsealed"}]
+        },
+        {
+          "id": 2, "type": "stat", "title": "Leader Raft",
+          "targets": [{"expr": "openbao_raft_leader", "legendFormat": "Leader"}]
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Requêtes token/s",
+          "targets": [{"expr": "rate(openbao_token_lookup[5m])", "legendFormat": "lookup/s"}]
+        }
+      ]
+    }
+---
+# Dashboard: MinIO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-minio
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  minio.json: |
+    {
+      "title": "MinIO — Object Storage",
+      "uid": "minio-lakehouse",
+      "tags": ["lakehouse", "minio", "storage"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "stat", "title": "Capacité libre",
+          "targets": [{"expr": "minio_cluster_capacity_usable_free_bytes / 1e12", "legendFormat": "TiB libres"}]
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Débit I/O",
+          "targets": [
+            {"expr": "rate(minio_s3_traffic_received_bytes[5m])", "legendFormat": "Reçu/s"},
+            {"expr": "rate(minio_s3_traffic_sent_bytes[5m])", "legendFormat": "Envoyé/s"}
+          ]
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Requêtes S3/s",
+          "targets": [{"expr": "rate(minio_s3_requests_total[5m])", "legendFormat": "req/s"}]
+        }
+      ]
+    }
+---
+# Dashboard: Kubernetes Namespaces Lakehouse
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-k8s
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  kubernetes.json: |
+    {
+      "title": "Kubernetes — Lakehouse Namespaces",
+      "uid": "k8s-lakehouse",
+      "tags": ["lakehouse", "kubernetes"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "table", "title": "Pods par namespace",
+          "targets": [{"expr": "count by (namespace) (kube_pod_status_phase{phase='Running', namespace=~'lakehouse-.*'})", "legendFormat": "{{namespace}}"}]
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "CPU demandé vs limite",
+          "targets": [
+            {"expr": "sum by (namespace) (kube_pod_container_resource_requests{resource='cpu', namespace=~'lakehouse-.*'})", "legendFormat": "requests {{namespace}}"},
+            {"expr": "sum by (namespace) (kube_pod_container_resource_limits{resource='cpu', namespace=~'lakehouse-.*'})", "legendFormat": "limits {{namespace}}"}
+          ]
+        }
+      ]
+    }
+---
+# Dashboard: Airflow
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-airflow
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  airflow.json: |
+    {
+      "title": "Airflow — Orchestration",
+      "uid": "airflow-lakehouse",
+      "tags": ["lakehouse", "airflow"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "stat", "title": "DAGs actifs",
+          "targets": [{"expr": "airflow_dag_active_runs", "legendFormat": "Active runs"}]
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Tâches par état",
+          "targets": [
+            {"expr": "airflow_task_instance_created_running", "legendFormat": "Running"},
+            {"expr": "airflow_task_instance_completed", "legendFormat": "Completed"},
+            {"expr": "airflow_task_instance_failed", "legendFormat": "Failed"}
+          ]
+        }
+      ]
+    }
+---
+# Dashboard: Alertmanager
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-alerts
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    grafana_dashboard: "1"
+data:
+  alerts.json: |
+    {
+      "title": "Alertes actives — Lakehouse",
+      "uid": "alerts-lakehouse",
+      "tags": ["lakehouse", "alerts"],
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "id": 1, "type": "alertlist", "title": "Alertes actives",
+          "options": {"alertName": "", "dashboardAlerts": false, "stateFilter": {"firing": true, "pending": true}}
+        }
+      ]
+    }
+---
+# Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.grafana.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: grafana
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.auth.existingSecret }}
+                  key: {{ .Values.grafana.auth.adminUserKey }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.auth.existingSecret }}
+                  key: {{ .Values.grafana.auth.adminPasswordKey }}
+            {{- if .Values.grafana.oidc.enabled }}
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.oidc.existingSecret }}
+                  key: {{ .Values.grafana.oidc.clientIdKey }}
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.oidc.existingSecret }}
+                  key: {{ .Values.grafana.oidc.clientSecretKey }}
+            - name: GF_AUTH_GENERIC_OAUTH_ENABLED
+              value: "true"
+            - name: GF_AUTH_GENERIC_OAUTH_NAME
+              value: "Keycloak"
+            - name: GF_AUTH_GENERIC_OAUTH_AUTH_URL
+              value: "{{ .Values.global.keycloakUrl }}/realms/lakehouse/protocol/openid-connect/auth"
+            - name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL
+              value: "{{ .Values.global.keycloakUrl }}/realms/lakehouse/protocol/openid-connect/token"
+            - name: GF_AUTH_GENERIC_OAUTH_USERINFO_URL
+              value: "{{ .Values.global.keycloakUrl }}/realms/lakehouse/protocol/openid-connect/userinfo"
+            - name: GF_AUTH_GENERIC_OAUTH_SCOPES
+              value: "openid profile email roles"
+            - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
+              value: "contains(groups[*], '{{ .Values.grafana.oidc.groups.adminGroup }}') && 'Admin' || contains(groups[*], '{{ .Values.grafana.oidc.groups.editorGroup }}') && 'Editor' || 'Viewer'"
+            - name: GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN
+              value: "false"
+            {{- end }}
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+            - name: GF_SERVER_ROOT_URL
+              value: "https://{{ .Values.grafana.ingress.host }}"
+          resources:
+            {{- toYaml .Values.grafana.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboard-trino
+              mountPath: /var/lib/grafana/dashboards/trino.json
+              subPath: trino.json
+            - name: dashboard-openbao
+              mountPath: /var/lib/grafana/dashboards/openbao.json
+              subPath: openbao.json
+            - name: dashboard-minio
+              mountPath: /var/lib/grafana/dashboards/minio.json
+              subPath: minio.json
+            - name: dashboard-k8s
+              mountPath: /var/lib/grafana/dashboards/kubernetes.json
+              subPath: kubernetes.json
+            - name: dashboard-airflow
+              mountPath: /var/lib/grafana/dashboards/airflow.json
+              subPath: airflow.json
+            - name: dashboard-alerts
+              mountPath: /var/lib/grafana/dashboards/alerts.json
+              subPath: alerts.json
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboard-trino
+          configMap:
+            name: grafana-dashboard-trino
+        - name: dashboard-openbao
+          configMap:
+            name: grafana-dashboard-openbao
+        - name: dashboard-minio
+          configMap:
+            name: grafana-dashboard-minio
+        - name: dashboard-k8s
+          configMap:
+            name: grafana-dashboard-k8s
+        - name: dashboard-airflow
+          configMap:
+            name: grafana-dashboard-airflow
+        - name: dashboard-alerts
+          configMap:
+            name: grafana-dashboard-alerts
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.grafana.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- if .Values.grafana.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.certIssuer }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: {{ .Values.grafana.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.grafana.ingress.host }}
+      secretName: grafana-tls-cert
+  rules:
+    - host: {{ .Values.grafana.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  name: http
+{{- end }}
+{{- end }}

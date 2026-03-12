@@ -1,0 +1,30 @@
+cloud_provider = "aws"
+aws_region     = "eu-west-1"
+cluster_name   = "lakehouse-production"
+
+vpc_cidr             = "10.20.0.0/16"
+availability_zones   = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+private_subnet_cidrs = ["10.20.1.0/24", "10.20.2.0/24", "10.20.3.0/24"]
+public_subnet_cidrs  = ["10.20.101.0/24", "10.20.102.0/24", "10.20.103.0/24"]
+
+# Restrict API server access to corporate VPN + bastion
+allowed_cidr_blocks = [
+  "203.0.113.0/24", # Corporate VPN egress range (replace)
+  "198.51.100.10/32" # Bastion host EIP (replace)
+]
+
+# KMS key for EBS encryption + OpenBao auto-unseal
+kms_key_id  = "mrk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+kms_key_arn = "arn:aws:kms:eu-west-1:123456789012:key/mrk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+domain        = "lakehouse.example.com"
+storage_class = "gp3"
+
+tags = {
+  Environment = "production"
+  Project     = "open-lakehouse-platform"
+  ManagedBy   = "terraform"
+  CostCenter  = "platform-engineering"
+  Compliance  = "sox"
+  DataClass   = "confidential"
+}

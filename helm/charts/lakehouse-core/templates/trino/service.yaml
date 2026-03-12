@@ -1,0 +1,46 @@
+{{- if .Values.trino.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-coordinator
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/v1/jmx/mbean/trino.execution:name=QueryManager"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: https
+      port: 8443
+      targetPort: https
+  selector:
+    app.kubernetes.io/name: trino-coordinator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-worker
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: trino-worker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

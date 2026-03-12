@@ -1,0 +1,27 @@
+# Copier ce fichier vers terraform.tfvars et remplir les valeurs réelles.
+# Ne JAMAIS committer terraform.tfvars dans le dépôt Git.
+
+cloud_provider     = "aws"
+aws_region         = "eu-west-1"
+cluster_name       = "lakehouse-staging"
+kubernetes_version = "1.29"
+
+vpc_cidr             = "10.10.0.0/16"
+availability_zones   = ["eu-west-1a", "eu-west-1b"]
+private_subnet_cidrs = ["10.10.1.0/24", "10.10.2.0/24"]
+public_subnet_cidrs  = ["10.10.101.0/24", "10.10.102.0/24"]
+
+# Remplacer par les CIDRs de votre équipe / VPN
+allowed_cidr_blocks = ["10.0.0.0/8"]
+
+# Remplacer par les ARNs/IDs réels de vos clés KMS
+kms_key_id  = "mrk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+kms_key_arn = "arn:aws:kms:eu-west-1:123456789012:key/mrk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+domain        = "staging.example.com"
+storage_class = "gp3"
+
+tags = {
+  CostCenter = "engineering"
+  Owner      = "platform-team"
+}

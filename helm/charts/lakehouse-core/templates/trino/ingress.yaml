@@ -1,0 +1,33 @@
+{{- if and .Values.trino.enabled .Values.trino.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trino
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.certIssuer }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: {{ .Values.trino.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.trino.ingress.host }}
+      secretName: trino-tls-cert
+  rules:
+    - host: {{ .Values.trino.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: trino-coordinator
+                port:
+                  name: http
+{{- end }}

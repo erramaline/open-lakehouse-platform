@@ -1,0 +1,279 @@
+{{- if .Values.openmetadata.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmetadata
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: openmetadata
+spec:
+  replicas: {{ .Values.openmetadata.replicas }}
+  minReadySeconds: 10
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openmetadata
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openmetadata
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: openmetadata
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: openmetadata
+          image: "{{ .Values.openmetadata.image.repository }}:{{ .Values.openmetadata.image.tag }}"
+          imagePullPolicy: {{ .Values.openmetadata.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8585
+              protocol: TCP
+          env:
+            - name: OM_DATABASE_HOST
+              value: postgresql.lakehouse-system.svc.cluster.local
+            - name: OM_DATABASE_PORT
+              value: "5432"
+            - name: OM_DATABASE_NAME
+              value: "{{ .Values.openmetadata.database.name }}"
+            - name: OM_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openmetadata.auth.dbExistingSecret }}
+                  key: username
+            - name: OM_DATABASE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openmetadata.auth.dbExistingSecret }}
+                  key: password
+            - name: OM_ELASTICSEARCH_HOST
+              value: elasticsearch.lakehouse-system.svc.cluster.local
+            - name: OM_ELASTICSEARCH_PORT
+              value: "9200"
+            - name: OM_ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openmetadata.auth.esExistingSecret }}
+                  key: password
+            - name: OPENMETADATA_SERVER_URL
+              value: "http://openmetadata.lakehouse-ingest.svc.cluster.local:8585"
+            - name: JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openmetadata.auth.jwtExistingSecret }}
+                  key: jwtPrivateKey
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.openmetadata.auth.jwtExistingSecret }}
+                  key: jwtPublicKey
+          resources:
+            {{- toYaml .Values.openmetadata.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health-check
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health-check
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmetadata
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: openmetadata
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8585
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: openmetadata
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- if .Values.openmetadata.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openmetadata
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.certIssuer }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: {{ .Values.openmetadata.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.openmetadata.ingress.host }}
+      secretName: openmetadata-tls-cert
+  rules:
+    - host: {{ .Values.openmetadata.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openmetadata
+                port:
+                  name: http
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openmetadata
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openmetadata
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+---
+{{- if .Values.docling.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docling
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: docling
+spec:
+  replicas: {{ .Values.docling.replicas }}
+  minReadySeconds: 5
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docling
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docling
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: docling
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: docling
+          image: "{{ .Values.docling.image.repository }}:{{ .Values.docling.image.tag }}"
+          imagePullPolicy: {{ .Values.docling.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MINIO_ENDPOINT
+              value: "{{ .Values.global.minioEndpoint }}"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.docling.auth.existingSecret }}
+                  key: accessKey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.docling.auth.existingSecret }}
+                  key: secretKey
+            - name: MINIO_BUCKET
+              value: "{{ .Values.docling.minio.bucket }}"
+          resources:
+            {{- toYaml .Values.docling.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docling
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: docling
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: docling
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- if .Values.docling.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: docling
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: docling
+  minReplicas: {{ .Values.docling.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.docling.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.docling.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

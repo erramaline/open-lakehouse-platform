@@ -1,0 +1,111 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: "3.14.0"
+  KIND_VERSION: "v0.22.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.29.2"
+
+jobs:
+  integration:
+    name: Integration — kind cluster
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+          cluster_name: lakehouse-test
+          config: .github/kind-config.yaml
+
+      - name: Install cert-manager CRDs
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.crds.yaml
+          kubectl wait --for=condition=Established crd/certificates.cert-manager.io --timeout=60s
+
+      - name: Install External Secrets Operator CRDs
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets --create-namespace \
+            --set installCRDs=true --wait --timeout=120s
+
+      - name: Deploy lakehouse-core (integration values)
+        run: |
+          kubectl apply -f kubernetes/base/namespace.yaml
+          helm install lakehouse-core helm/charts/lakehouse-core \
+            --namespace lakehouse-system \
+            -f helm/charts/lakehouse-core/values.yaml \
+            -f helm/charts/lakehouse-core/values.staging.yaml \
+            --set global.clusterDomain=cluster.local \
+            --set global.storageClass=standard \
+            --set certManager.clusterIssuer=letsencrypt-staging \
+            --timeout 300s \
+            --wait-for-jobs
+
+      - name: Wait for core pods ready
+        run: |
+          kubectl wait --for=condition=Ready pod \
+            -l app.kubernetes.io/part-of=lakehouse \
+            --namespace lakehouse-system \
+            --timeout=180s
+
+      - name: Integration — PostgreSQL connectivity
+        run: |
+          kubectl run pg-test --image=bitnami/postgresql:15 --restart=Never \
+            --namespace lakehouse-system \
+            --env="PGPASSWORD=$(kubectl get secret postgresql-root-secret -n lakehouse-system -o jsonpath='{.data.password}' | base64 -d)" \
+            --command -- psql -h postgresql.lakehouse-system.svc.cluster.local -U postgres -c '\l' \
+            --attach --rm --quiet
+
+      - name: Integration — MinIO health check
+        run: |
+          kubectl run minio-test --image=curlimages/curl:8.6.0 --restart=Never \
+            --namespace lakehouse-storage \
+            --command -- curl -sf http://minio.lakehouse-storage.svc.cluster.local:9000/minio/health/live
+          kubectl wait --for=condition=Succeeded pod/minio-test -n lakehouse-storage --timeout=30s
+          kubectl delete pod minio-test -n lakehouse-storage
+
+      - name: Integration — Trino coordinator health
+        run: |
+          kubectl run trino-test --image=curlimages/curl:8.6.0 --restart=Never \
+            --namespace lakehouse-data \
+            --command -- curl -sf http://trino.lakehouse-data.svc.cluster.local:8080/v1/info
+          kubectl wait --for=condition=Succeeded pod/trino-test -n lakehouse-data --timeout=60s
+          kubectl delete pod trino-test -n lakehouse-data
+
+      - name: Integration — Keycloak health
+        run: |
+          kubectl run kc-test --image=curlimages/curl:8.6.0 --restart=Never \
+            --namespace lakehouse-system \
+            --command -- curl -sf http://keycloak.lakehouse-system.svc.cluster.local:9000/health/ready
+          kubectl wait --for=condition=Succeeded pod/kc-test -n lakehouse-system --timeout=60s
+          kubectl delete pod kc-test -n lakehouse-system
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl describe pods -A | head -300
+          kubectl get events -A --sort-by='.lastTimestamp' | tail -50
+
+      - name: Helm test
+        run: |
+          helm test lakehouse-core --namespace lakehouse-system --timeout 120s || true

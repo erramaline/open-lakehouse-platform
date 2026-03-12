@@ -1,0 +1,185 @@
+{{- if .Values.certManager.enabled }}
+---
+# ClusterIssuer — Let's Encrypt production
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ .Values.certManager.acme.email }}
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: {{ .Values.global.ingressClass }}
+---
+# ClusterIssuer — Let's Encrypt staging (pour les tests)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: {{ .Values.certManager.acme.email }}
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: {{ .Values.global.ingressClass }}
+---
+{{- if .Values.certManager.internalCA.enabled }}
+# ClusterIssuer — CA interne (self-hosted via cert-manager)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: internal-ca
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ .Values.certManager.internalCA.secretName }}
+{{- end }}
+---
+# Certificat Trino
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-tls
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: trino-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.trino.ingress.host }}
+    - trino-coordinator.lakehouse-data.svc.cluster.local
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat Keycloak
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: keycloak-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.keycloak.ingress.host }}
+    - keycloak.lakehouse-system.svc.cluster.local
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat OpenBao
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-tls
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: openbao-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - openbao-0.openbao.lakehouse-system.svc.cluster.local
+    - openbao-1.openbao.lakehouse-system.svc.cluster.local
+    - openbao-2.openbao.lakehouse-system.svc.cluster.local
+    - openbao.lakehouse-system.svc.cluster.local
+    - openbao-active.lakehouse-system.svc.cluster.local
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat MinIO
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio-tls
+  namespace: lakehouse-storage
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: minio-console-tls
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.minio.ingress.consoleHost }}
+    - minio.lakehouse-storage.svc.cluster.local
+    - minio-api.lakehouse-storage.svc.cluster.local
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat Airflow
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: airflow-tls
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: airflow-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.airflow.ingress.host }}
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat OpenMetadata
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openmetadata-tls
+  namespace: lakehouse-ingest
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: openmetadata-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.openmetadata.ingress.host }}
+  duration: 2160h
+  renewBefore: 360h
+---
+# Certificat Trino Gateway
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: trino-gateway-tls
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  secretName: trino-gateway-tls-cert
+  issuerRef:
+    name: {{ .Values.global.certIssuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.trinoGateway.ingress.host }}
+  duration: 2160h
+  renewBefore: 360h
+{{- end }}

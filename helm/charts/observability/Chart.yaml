@@ -1,0 +1,24 @@
+apiVersion: v2
+name: observability
+description: >
+  Helm chart d'observabilité pour l'Open Lakehouse Platform.
+  Déploie Prometheus, Grafana (OIDC), Loki, Promtail et Alertmanager.
+type: application
+version: 1.0.0
+appVersion: "2026.3"
+
+keywords:
+  - observability
+  - prometheus
+  - grafana
+  - loki
+  - promtail
+  - alertmanager
+  - lakehouse
+
+maintainers:
+  - name: Platform Engineering
+    email: platform@example.com
+
+annotations:
+  artifacthub.io/category: monitoring-logging

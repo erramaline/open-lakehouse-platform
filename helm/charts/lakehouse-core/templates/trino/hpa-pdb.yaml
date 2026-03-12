@@ -1,0 +1,68 @@
+{{- if .Values.trino.enabled }}
+---
+# Worker HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: trino-worker
+  minReplicas: {{ .Values.trino.workers.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.trino.workers.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.trino.workers.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+---
+# Coordinator PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trino-coordinator
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-coordinator
+      app.kubernetes.io/instance: {{ .Release.Name }}
+---
+# Worker PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trino-worker
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.trino.workers.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

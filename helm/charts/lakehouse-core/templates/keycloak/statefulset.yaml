@@ -1,0 +1,185 @@
+{{- if .Values.keycloak.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: keycloak
+spec:
+  serviceName: keycloak
+  replicas: {{ .Values.keycloak.replicas }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: keycloak
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: keycloak
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: keycloak
+          image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ .Values.keycloak.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          args:
+            - start
+            - --optimized
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: "jdbc:postgresql://postgresql.lakehouse-system.svc.cluster.local:5432/{{ .Values.keycloak.database.name }}"
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.auth.dbExistingSecret }}
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.auth.dbExistingSecret }}
+                  key: password
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.auth.adminExistingSecret }}
+                  key: adminUser
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.auth.adminExistingSecret }}
+                  key: adminPassword
+            - name: KC_HOSTNAME
+              value: "{{ .Values.keycloak.ingress.host }}"
+            - name: KC_PROXY
+              value: edge
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            - name: KC_CACHE
+              value: ispn
+            - name: KC_CACHE_STACK
+              value: kubernetes
+            - name: KC_LOG_LEVEL
+              value: "{{ .Values.keycloak.logLevel }}"
+            - name: jgroups.dns.query
+              value: "keycloak.lakehouse-system.svc.cluster.local"
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: keycloak
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: management
+      port: 9000
+      targetPort: management
+  selector:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- if .Values.keycloak.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.certIssuer }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: {{ .Values.keycloak.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.keycloak.ingress.host }}
+      secretName: keycloak-tls-cert
+  rules:
+    - host: {{ .Values.keycloak.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keycloak
+  namespace: lakehouse-system
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

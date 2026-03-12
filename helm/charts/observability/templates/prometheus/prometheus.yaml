@@ -1,0 +1,402 @@
+{{- if .Values.prometheus.enabled }}
+---
+# Prometheus ConfigMap — scrape configs + rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.prometheus.scrapeInterval }}
+      evaluation_interval: {{ .Values.prometheus.evaluationInterval }}
+      external_labels:
+        cluster: lakehouse
+        environment: {{ .Values.global.environment | default "production" }}
+
+    rule_files:
+      - /etc/prometheus/rules/*.yaml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager.lakehouse-obs.svc.cluster.local:9093
+
+    scrape_configs:
+      # ── Prometheus itself ────────────────────────────────────────────────
+      - job_name: prometheus
+        static_configs:
+          - targets: [localhost:9090]
+
+      # ── Kubernetes API server ────────────────────────────────────────────
+      - job_name: kubernetes-apiservers
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # ── Kubelets (cAdvisor) ──────────────────────────────────────────────
+      - job_name: kubernetes-nodes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+      # ── Trino ────────────────────────────────────────────────────────────
+      - job_name: trino
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-data]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_name
+
+      # ── MinIO ────────────────────────────────────────────────────────────
+      - job_name: minio
+        metrics_path: /minio/v2/metrics/cluster
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-storage]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: minio-api
+
+      # ── OpenBao ──────────────────────────────────────────────────────────
+      - job_name: openbao
+        metrics_path: /v1/sys/metrics
+        params:
+          format: [prometheus]
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: openbao-active
+
+      # ── Keycloak ────────────────────────────────────────────────────────
+      - job_name: keycloak
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: keycloak
+
+      # ── Airflow ──────────────────────────────────────────────────────────
+      - job_name: airflow
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-ingest]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: airflow-webserver
+
+      # ── Ranger ───────────────────────────────────────────────────────────
+      - job_name: ranger
+        metrics_path: /service/metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-data]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: ranger-admin
+
+      # ── Polaris ──────────────────────────────────────────────────────────
+      - job_name: polaris
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-data]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: polaris
+
+      # ── Loki ─────────────────────────────────────────────────────────────
+      - job_name: loki
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-obs]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: loki
+
+      # ── PostgreSQL (via postgres_exporter) ───────────────────────────────
+      - job_name: postgresql
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [lakehouse-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: postgresql-exporter
+
+  # ── Alerting rules ─────────────────────────────────────────────────────────
+  lakehouse-rules.yaml: |
+    groups:
+      - name: trino
+        rules:
+          - alert: TrinoQueryFailureRateHigh
+            expr: rate(trino_QueryManager_FailedQueries_total[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              component: trino
+            annotations:
+              summary: "Taux d'échec queries Trino élevé"
+              description: "Plus de 10% des queries Trino échouent sur les 5 dernières minutes."
+          - alert: TrinoCoordinatorDown
+            expr: up{job="trino", kubernetes_name="trino-coordinator"} == 0
+            for: 2m
+            labels:
+              severity: critical
+              component: trino
+            annotations:
+              summary: "Coordinateur Trino indisponible"
+              description: "Le coordinateur Trino n'est pas joignable depuis 2 minutes."
+
+      - name: openbao
+        rules:
+          - alert: OpenBaoSealed
+            expr: openbao_core_unsealed == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: openbao
+            annotations:
+              summary: "OpenBao est scellé"
+              description: "Un nœud OpenBao est scellé — les secrets ne sont plus disponibles."
+          - alert: OpenBaoRaftLeaderLoss
+            expr: openbao_raft_leader == 0
+            for: 30s
+            labels:
+              severity: critical
+              component: openbao
+            annotations:
+              summary: "OpenBao n'a pas de leader Raft"
+
+      - name: minio
+        rules:
+          - alert: MinIOStorageSpaceLow
+            expr: minio_cluster_capacity_usable_free_bytes / minio_cluster_capacity_usable_total_bytes < 0.15
+            for: 10m
+            labels:
+              severity: warning
+              component: minio
+            annotations:
+              summary: "Espace MinIO faible (< 15%)"
+          - alert: MinIODown
+            expr: up{job="minio"} == 0
+            for: 2m
+            labels:
+              severity: critical
+              component: minio
+            annotations:
+              summary: "MinIO indisponible"
+
+      - name: postgresql
+        rules:
+          - alert: PostgreSQLDown
+            expr: up{job="postgresql"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: postgresql
+            annotations:
+              summary: "PostgreSQL primaire indisponible"
+          - alert: PostgreSQLConnectionsHigh
+            expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+            for: 5m
+            labels:
+              severity: warning
+              component: postgresql
+            annotations:
+              summary: "Connexions PostgreSQL > 80%"
+
+      - name: kubernetes
+        rules:
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total{namespace=~"lakehouse-.*"}[15m]) > 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod en CrashLoop: {{ $labels.pod }}"
+          - alert: PersistentVolumeFillingUp
+            expr: |
+              kubelet_volume_stats_available_bytes{namespace=~"lakehouse-.*"}
+              / kubelet_volume_stats_capacity_bytes{namespace=~"lakehouse-.*"} < 0.15
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "PVC bientôt plein: {{ $labels.persistentvolumeclaim }}"
+---
+# Prometheus StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  serviceName: prometheus
+  replicas: {{ .Values.prometheus.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus/data
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+            - --web.enable-lifecycle
+            - --web.enable-admin-api
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.prometheus.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

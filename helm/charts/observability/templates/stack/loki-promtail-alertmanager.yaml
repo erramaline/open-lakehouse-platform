@@ -1,0 +1,431 @@
+{{- if .Values.loki.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: "2024-01-01"
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v12
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: {{ .Values.loki.retentionPeriod }}
+      ingestion_rate_mb: 64
+      ingestion_burst_size_mb: 128
+      max_query_series: 10000
+    ruler:
+      alertmanager_url: http://alertmanager.lakehouse-obs.svc.cluster.local:9093
+    analytics:
+      reporting_enabled: false
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: loki
+  replicas: {{ .Values.loki.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loki
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: loki
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: loki
+          image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.loki.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - -config.file=/etc/loki/loki.yaml
+          ports:
+            - name: http
+              containerPort: 3100
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.loki.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+              readOnly: true
+            - name: data
+              mountPath: /loki
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.loki.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+---
+{{- if .Values.promtail.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 3101
+      grpc_listen_port: 0
+    positions:
+      filename: /run/promtail/positions.yaml
+    clients:
+      - url: http://loki.lakehouse-obs.svc.cluster.local:3100/loki/api/v1/push
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        pipeline_stages:
+          - docker: {}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_namespace]
+            action: keep
+            regex: lakehouse-.*
+          - source_labels: [__meta_kubernetes_pod_annotation_log_scrape]
+            action: drop
+            regex: "false"
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: promtail
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: promtail
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: promtail
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      containers:
+        - name: promtail
+          image: "{{ .Values.promtail.image.repository }}:{{ .Values.promtail.image.tag }}"
+          imagePullPolicy: {{ .Values.promtail.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [DAC_OVERRIDE]
+          args:
+            - -config.file=/etc/promtail/promtail.yaml
+          ports:
+            - name: http
+              containerPort: 3101
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.promtail.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+              readOnly: true
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: positions
+              mountPath: /run/promtail
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-config
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: positions
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.alertmanager.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: [alertname, cluster, severity, component]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: default
+      routes:
+        - match:
+            severity: critical
+          receiver: critical
+          continue: true
+        - match:
+            severity: warning
+          receiver: warning
+    receivers:
+      - name: default
+        {{- if .Values.alertmanager.receivers.slack.enabled }}
+        slack_configs:
+          - api_url: "SLACK_WEBHOOK_URL_PLACEHOLDER"
+            channel: "{{ .Values.alertmanager.receivers.slack.channel }}"
+            send_resolved: true
+            title: '{{ `{{ .GroupLabels.SortedPairs.Values | join " " }}` }} — {{ `{{ .Status | toUpper }}` }}'
+            text: '{{ `{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}` }}'
+        {{- end }}
+      - name: critical
+        {{- if .Values.alertmanager.receivers.slack.enabled }}
+        slack_configs:
+          - api_url: "SLACK_WEBHOOK_URL_PLACEHOLDER"
+            channel: "{{ .Values.alertmanager.receivers.slack.channel }}"
+            send_resolved: true
+            color: '#FF0000'
+        {{- end }}
+      - name: warning
+        {{- if .Values.alertmanager.receivers.slack.enabled }}
+        slack_configs:
+          - api_url: "SLACK_WEBHOOK_URL_PLACEHOLDER"
+            channel: "{{ .Values.alertmanager.receivers.slack.channel }}"
+            send_resolved: true
+            color: '#FFA500'
+        {{- end }}
+    inhibit_rules:
+      - source_match:
+          severity: critical
+        target_match:
+          severity: warning
+        equal: [alertname, cluster, component]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.alertmanager.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: alertmanager
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alertmanager
+          image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
+          imagePullPolicy: {{ .Values.alertmanager.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.alertmanager.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: data
+              mountPath: /alertmanager
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: alertmanager-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-data
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.alertmanager.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: lakehouse-obs
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9093
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

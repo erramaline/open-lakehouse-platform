@@ -1,0 +1,153 @@
+{{- if .Values.trino.enabled }}
+---
+# Coordinator config + JVM
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-coordinator-config
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=false
+    http-server.http.port=8080
+    http-server.https.port=8443
+    http-server.https.enabled=true
+    http-server.https.keystore.path=/tls/keystore.jks
+    http-server.https.keystore.key=${ENV:TRINO_KEYSTORE_PASSWORD}
+    discovery.uri=http://trino-coordinator.lakehouse-data.svc.cluster.local:8080
+    # OIDC / OAuth2
+    http-server.authentication.type=OAUTH2
+    http-server.authentication.oauth2.issuer={{ .Values.global.keycloakUrl }}/realms/lakehouse
+    http-server.authentication.oauth2.client-id={{ .Values.trino.oidc.clientId }}
+    http-server.authentication.oauth2.client-secret=${ENV:OIDC_CLIENT_SECRET}
+    http-server.authentication.oauth2.scopes=openid,profile,email,roles
+    # Access control
+    access-control.config-files=/etc/trino/ranger-plugin/ranger-trino-security.xml
+  jvm.config: |
+    -server
+    -Xmx{{ .Values.trino.coordinator.jvmMaxHeap }}
+    -XX:InitialRAMPercentage=75
+    -XX:MaxRAMPercentage=75
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=/tmp/trino-oom.hprof
+    -XX:ReservedCodeCacheSize=512M
+    -Djdk.attach.allowAttachSelf=true
+    -Djdk.nio.maxCachedBufferSize=2000000
+  log.properties: |
+    io.trino=INFO
+    io.trino.plugin.ranger=INFO
+---
+# Worker config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-worker-config
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+data:
+  config.properties: |
+    coordinator=false
+    http-server.http.port=8080
+    discovery.uri=http://trino-coordinator.lakehouse-data.svc.cluster.local:8080
+    node-scheduler.include-coordinator=false
+  jvm.config: |
+    -server
+    -Xmx{{ .Values.trino.workers.jvmMaxHeap }}
+    -XX:InitialRAMPercentage=75
+    -XX:MaxRAMPercentage=75
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=/tmp/trino-worker-oom.hprof
+    -XX:ReservedCodeCacheSize=512M
+  log.properties: |
+    io.trino=INFO
+---
+# Catalog config (Iceberg + Polaris + Nessie)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog-config
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+data:
+  iceberg_polaris.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri={{ .Values.trino.catalog.polarisUri }}
+    iceberg.rest-catalog.security=OAUTH2
+    iceberg.rest-catalog.oauth2.token-endpoint={{ .Values.global.keycloakUrl }}/realms/lakehouse/protocol/openid-connect/token
+    iceberg.rest-catalog.oauth2.client-id={{ .Values.trino.catalog.polarisClientId }}
+    iceberg.rest-catalog.oauth2.scope={{ .Values.trino.catalog.polarisScope }}
+  iceberg_nessie.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=nessie
+    iceberg.nessie-catalog.uri={{ .Values.trino.catalog.nessieUri }}
+    iceberg.nessie-catalog.default-warehouse-dir=s3://{{ .Values.global.lakehouseBucket }}/nessie-warehouse
+    fs.native-s3.enabled=true
+    s3.endpoint={{ .Values.global.minioEndpoint }}
+    s3.path-style-access=true
+    s3.region=us-east-1
+  tpch.properties: |
+    connector.name=tpch
+    tpch.splits-per-node=4
+---
+# Ranger plugin config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-ranger-plugin-config
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+data:
+  ranger-trino-security.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <property>
+        <name>ranger.plugin.trino.policy.source.impl</name>
+        <value>org.apache.ranger.admin.client.RangerAdminRESTClient</value>
+      </property>
+      <property>
+        <name>ranger.plugin.trino.service.name</name>
+        <value>{{ .Values.trino.ranger.serviceName }}</value>
+      </property>
+      <property>
+        <name>ranger.plugin.trino.policy.rest.url</name>
+        <value>http://ranger-admin.lakehouse-data.svc.cluster.local:6080</value>
+      </property>
+      <property>
+        <name>ranger.plugin.trino.policy.pollIntervalMs</name>
+        <value>30000</value>
+      </property>
+      <property>
+        <name>ranger.plugin.trino.access.cluster.name</name>
+        <value>trino-lakehouse</value>
+      </property>
+    </configuration>
+  ranger-trino-audit.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <property>
+        <name>xasecure.audit.is.enabled</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>xasecure.audit.destination.solr</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>xasecure.audit.destination.hdfs</name>
+        <value>false</value>
+      </property>
+    </configuration>
+{{- end }}

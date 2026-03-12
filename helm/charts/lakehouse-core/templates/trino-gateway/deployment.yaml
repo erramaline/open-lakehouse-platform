@@ -1,0 +1,144 @@
+{{- if .Values.trinoGateway.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-gateway
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-gateway
+spec:
+  replicas: {{ .Values.trinoGateway.replicas }}
+  minReadySeconds: 10
+  strategy:
+    {{- include "lakehouse-core.rollingUpdateStrategy" . | nindent 4 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-gateway
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino-gateway
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: trino-gateway
+      securityContext:
+        {{- include "lakehouse-core.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: trino-gateway
+          image: "{{ .Values.trinoGateway.image.repository }}:{{ .Values.trinoGateway.image.tag }}"
+          imagePullPolicy: {{ .Values.trinoGateway.image.pullPolicy }}
+          securityContext:
+            {{- include "lakehouse-core.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: app
+              containerPort: 8090
+              protocol: TCP
+          env:
+            - name: TRINO_GATEWAY_DB_URL
+              value: "jdbc:postgresql://postgresql.lakehouse-system.svc.cluster.local:5432/{{ .Values.trinoGateway.database.name }}"
+            - name: TRINO_GATEWAY_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trinoGateway.auth.existingSecret }}
+                  key: username
+            - name: TRINO_GATEWAY_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trinoGateway.auth.existingSecret }}
+                  key: password
+          resources:
+            {{- toYaml .Values.trinoGateway.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/public/backends
+              port: app
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /api/public/backends
+              port: app
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-gateway
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: trino-gateway
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: app
+      port: 8090
+      targetPort: app
+  selector:
+    app.kubernetes.io/name: trino-gateway
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- if .Values.trinoGateway.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trino-gateway
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.global.certIssuer }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: {{ .Values.trinoGateway.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.trinoGateway.ingress.host }}
+      secretName: trino-gateway-tls-cert
+  rules:
+    - host: {{ .Values.trinoGateway.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: trino-gateway
+                port:
+                  name: http
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trino-gateway
+  namespace: lakehouse-data
+  labels:
+    {{- include "lakehouse-core.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino-gateway
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

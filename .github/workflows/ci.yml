@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+env:
+  HELM_VERSION: "3.14.0"
+  TERRAFORM_VERSION: "1.7.0"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint — lakehouse-core
+        run: |
+          helm lint helm/charts/lakehouse-core \
+            -f helm/charts/lakehouse-core/values.yaml \
+            -f helm/charts/lakehouse-core/values.staging.yaml
+
+      - name: Helm lint — observability (staging)
+        run: |
+          helm lint helm/charts/observability \
+            -f helm/charts/observability/values.yaml
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+      - run: |
+          tflint --init
+          tflint --recursive --format compact
+
+      - name: Validate Kubernetes manifests (kustomize build)
+        run: |
+          kubectl version --client
+          kustomize build kubernetes/overlays/staging | kubectl apply --dry-run=client -f -
+        env:
+          KUBECONFIG: /dev/null
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gitleaks — secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy — filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Checkov — IaC security
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          soft_fail: true
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest great-expectations pydantic
+
+      - name: Run data quality tests
+        run: pytest tests/ -v --tb=short
+
+  build:
+    name: Build Helm Packages
+    runs-on: ubuntu-24.04
+    needs: [lint, security, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Package charts
+        run: |
+          mkdir -p dist/
+          helm package helm/charts/lakehouse-core -d dist/
+          helm package helm/charts/observability -d dist/
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: dist/
+          retention-days: 30

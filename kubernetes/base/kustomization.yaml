@@ -5,11 +5,18 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - pod-security/pod-security-admission.yaml
   - resource-quotas/quotas.yaml
   - rbac/service-accounts.yaml
   - ../../security/network-policies/k8s-network-policies.yaml
 
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
-  app.kubernetes.io/part-of: open-lakehouse-platform
+# PSA labels are applied as strategic-merge patches so they
+# do not re-declare Namespace resources already in namespace.yaml.
+patches:
+  - path: pod-security/pod-security-admission.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: open-lakehouse-platform
+    includeSelectors: false
+    includeTemplates: true

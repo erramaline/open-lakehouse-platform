@@ -40,9 +40,10 @@ def _import_module_from_path(path: Path) -> ModuleType:
 
 def _has_airflow() -> bool:
     try:
-        import airflow  # noqa: F401
+        from airflow.models import DAG  # noqa: F401
+        from airflow.operators.python import PythonOperator  # noqa: F401
         return True
-    except ImportError:
+    except (ImportError, AttributeError):
         return False
 
 

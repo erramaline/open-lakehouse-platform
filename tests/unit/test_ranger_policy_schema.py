@@ -32,10 +32,13 @@ VALID_MASK_TYPES = {
     "MASK_NONE",
     "MASK_DATE_SHOW_YEAR",
     "MASK_CUSTOM",
+    # NONE = passthrough (no masking) — used for privileged groups
+    "NONE",
 }
 
-REQUIRED_POLICY_KEYS = {"serviceType", "policies"}
-REQUIRED_ACCESS_CONFIG_KEYS = {"name", "type"}
+# Each file is a single Ranger policy object (not a list wrapper).
+# Required keys for any individual policy.
+REQUIRED_POLICY_KEYS = {"policyName", "serviceType", "policyType"}
 
 
 def load_policy(filename: str) -> dict:
@@ -63,20 +66,20 @@ def test_json_parseable(filename: str):
 
 @pytest.mark.parametrize("filename", policy_files())
 def test_required_top_level_keys(filename: str):
-    """Every policy file must have 'serviceType' and 'policies' keys."""
+    """Every policy file must have policyName, serviceType, and policyType."""
     data = load_policy(filename)
     missing = REQUIRED_POLICY_KEYS - data.keys()
     assert not missing, f"{filename} is missing keys: {missing}"
 
 
 @pytest.mark.parametrize("filename", policy_files())
-def test_policies_is_list(filename: str):
+def test_policy_name_non_empty(filename: str):
     data = load_policy(filename)
-    assert isinstance(data["policies"], list), f"'policies' in {filename} must be a list"
+    assert data.get("policyName", "").strip(), f"'policyName' is empty in {filename}"
 
 
 # ---------------------------------------------------------------------------
-# Column-mask policy
+# Column-mask policy (policyType == 1)
 # ---------------------------------------------------------------------------
 
 class TestIcebergColumnMask:
@@ -86,37 +89,28 @@ class TestIcebergColumnMask:
         self.data = load_policy(self.FILE)
 
     def test_has_policies(self):
-        assert len(self.data["policies"]) >= 1, "column mask file must define at least one policy"
+        assert self.data.get("policyType") == 1, "column mask must have policyType=1"
 
     def test_each_policy_has_name(self):
-        for p in self.data["policies"]:
-            assert "name" in p, f"Policy without 'name': {p}"
+        assert self.data.get("policyName", "").strip(), "column mask must have a non-empty policyName"
 
     def test_mask_types_are_valid(self):
-        for policy in self.data["policies"]:
-            for item in policy.get("dataMaskPolicies", []):
-                for condition in item.get("dataMaskInfo", {}).get("dataMaskType", []) or []:
-                    # Some structures nest differently — just ensure it's a non-empty string
-                    pass
-            # Check maskInfos where present
-            for info in policy.get("dataMaskPolicyItems", []):
-                mask_type = info.get("dataMaskInfo", {}).get("dataMaskType", "")
-                if mask_type:
-                    assert mask_type in VALID_MASK_TYPES, (
-                        f"Unknown mask type '{mask_type}' in policy '{policy.get('name')}'"
-                    )
+        for info in self.data.get("dataMaskPolicyItems", []):
+            mask_type = info.get("dataMaskInfo", {}).get("dataMaskType", "")
+            if mask_type:
+                assert mask_type in VALID_MASK_TYPES, (
+                    f"Unknown mask type '{mask_type}' in {self.FILE}"
+                )
 
     def test_at_least_one_masked_column(self):
-        """At least one policy must reference a column resource."""
-        has_column = any(
-            "column" in p.get("resources", {})
-            for p in self.data["policies"]
+        """Column-mask policy must reference a column resource."""
+        assert "column" in self.data.get("resources", {}), (
+            "No column-level resource found in column-mask policy"
         )
-        assert has_column, "No column-level resource found in column-mask policy"
 
 
 # ---------------------------------------------------------------------------
-# Row-filter policy
+# Row-filter policy (policyType == 2)
 # ---------------------------------------------------------------------------
 
 class TestIcebergRowFilter:
@@ -126,23 +120,26 @@ class TestIcebergRowFilter:
         self.data = load_policy(self.FILE)
 
     def test_has_policies(self):
-        assert len(self.data["policies"]) >= 1
+        assert self.data.get("policyType") == 2, "row filter must have policyType=2"
 
     def test_row_filter_expressions_non_empty(self):
-        for policy in self.data["policies"]:
-            for item in policy.get("rowFilterPolicyItems", []):
-                expr = item.get("rowFilterInfo", {}).get("filterExpr", "")
-                assert expr.strip(), (
-                    f"Empty row-filter expression in policy '{policy.get('name')}'"
-                )
+        # Privileged groups (engineers, admins) use empty filterExpr = no restriction.
+        # At least ONE item must have a real filter expression.
+        items = self.data.get("rowFilterPolicyItems", [])
+        assert items, f"No rowFilterPolicyItems found in {self.FILE}"
+        non_empty = [it for it in items if it.get("rowFilterInfo", {}).get("filterExpr", "").strip()]
+        assert non_empty, (
+            f"All rowFilterPolicyItems have empty filterExpr in {self.FILE}. "
+            "At least one restricted group must have a non-empty filter."
+        )
 
     def test_row_filter_is_valid_sql_fragment(self):
-        """Filter expressions must at least look like SQL (contain a column reference)."""
-        for policy in self.data["policies"]:
-            for item in policy.get("rowFilterPolicyItems", []):
-                expr = item.get("rowFilterInfo", {}).get("filterExpr", "")
-                # Basic sanity: must not be trivially true/blank and must reference some column
-                assert len(expr) > 2, f"Suspiciously short filter: '{expr}'"
+        """Non-empty filter expressions must look like SQL (non-trivial length)."""
+        items = self.data.get("rowFilterPolicyItems", [])
+        for item in items:
+            expr = item.get("rowFilterInfo", {}).get("filterExpr", "")
+            if expr.strip():  # skip empty (passthrough for privileged groups)
+                assert len(expr) > 2, f"Suspiciously short filter expression: '{expr}'"
 
 
 # ---------------------------------------------------------------------------
@@ -156,13 +153,12 @@ class TestAuditPolicy:
         self.data = load_policy(self.FILE)
 
     def test_has_policies(self):
-        assert len(self.data["policies"]) >= 1
+        assert self.data.get("policyName", "").strip(), "audit policy must have a policyName"
 
     def test_audit_logging_enabled(self):
-        for policy in self.data["policies"]:
-            assert policy.get("isAuditEnabled", False) is True, (
-                f"Audit not enabled for policy '{policy.get('name')}'"
-            )
+        assert self.data.get("isAuditEnabled", False) is True, (
+            f"isAuditEnabled must be true in {self.FILE}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -176,16 +172,15 @@ class TestSchemaAccess:
         self.data = load_policy(self.FILE)
 
     def test_has_policies(self):
-        assert len(self.data["policies"]) >= 1
+        assert self.data.get("policyName", "").strip(), "schema-access must have a policyName"
 
     def test_access_types_defined(self):
-        for policy in self.data["policies"]:
-            for item in policy.get("policyItems", []):
-                for acc in item.get("accesses", []):
-                    assert "type" in acc, f"Access item missing 'type': {acc}"
-                    assert isinstance(acc["isAllowed"], bool), (
-                        f"'isAllowed' must be bool in policy '{policy.get('name')}'"
-                    )
+        for item in self.data.get("policyItems", []):
+            for acc in item.get("accesses", []):
+                assert "type" in acc, f"Access item missing 'type' in {self.FILE}: {acc}"
+                assert isinstance(acc.get("isAllowed"), bool), (
+                    f"'isAllowed' must be bool in {self.FILE}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +190,5 @@ class TestSchemaAccess:
 @pytest.mark.parametrize("filename", policy_files())
 def test_no_policy_with_empty_name(filename: str):
     data = load_policy(filename)
-    for policy in data["policies"]:
-        name = policy.get("name", "").strip()
-        assert name, f"{filename}: found a policy with an empty 'name'"
+    name = data.get("policyName", "").strip()
+    assert name, f"{filename}: policyName is empty or missing"

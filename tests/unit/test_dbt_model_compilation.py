@@ -37,9 +37,12 @@ def _load_yaml(path: Path) -> dict:
 
 
 def _dbt_available() -> bool:
-    return subprocess.run(
-        ["dbt", "--version"], capture_output=True, timeout=10
-    ).returncode == 0
+    try:
+        return subprocess.run(
+            ["dbt", "--version"], capture_output=True, timeout=10
+        ).returncode == 0
+    except FileNotFoundError:
+        return False
 
 
 # ---------------------------------------------------------------------------

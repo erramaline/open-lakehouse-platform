@@ -254,6 +254,56 @@ make test            # integration + e2e (requires make dev-up)
 
 ---
 
+## Validation Deployment (Oracle Cloud Always Free)
+
+A single-node deployment profile is provided for full-stack connection validation on a free-tier ARM64 VM, without requiring any HA infrastructure.
+
+### Prerequisites
+
+- Oracle Cloud account with an **Always Free** VM shape: `VM.Standard.A1.Flex` — **4 OCPU / 24 GB RAM / ARM64**
+- [k3s](https://k3s.io) installed on the VM (`curl -sfL https://get.k3s.io | sh -`)
+- Helm 3.14+ installed
+- `kubectl` configured against the k3s cluster
+
+### Deployment
+
+```bash
+# 1. Deploy the full stack (single-node profile)
+make validate-up
+
+# 2. Run all tests
+make validate-all
+
+# Optional — run only unit + integration
+make validate-test
+
+# Optional — run only e2e (excluding DR)
+make validate-e2e
+
+# Optional — run DR tests explicitly
+make validate-dr
+```
+
+### Expected Results
+
+| Test suite | Expected outcome |
+|---|---|
+| Unit tests (`tests/unit/`) | 92+ passed, 0 failed |
+| Integration tests (`tests/integration/`) | All passed |
+| End-to-end tests (`tests/e2e/`, excl. DR) | All passed |
+
+### What is not tested in this mode
+
+| Feature | Reason |
+|---|---|
+| HA failover (coordinator, OpenBao Raft, Keycloak) | Single-replica deployment — no standby to fail over to |
+| HPA autoscaling | `autoscaling.enabled: false` — no metrics-server scaling |
+| MinIO erasure coding | `mode: standalone` — single drive, no EC parity |
+| PostgreSQL streaming replication | `readReplica.enabled: false` |
+| Celery worker autoscaling | `executor: LocalExecutor` — no Redis/Celery |
+
+---
+
 ## License
 
 All platform configuration, documentation, and code in this repository is distributed under the **Apache License 2.0**, unless a specific file header indicates otherwise.

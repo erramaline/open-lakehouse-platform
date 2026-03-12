@@ -314,6 +314,40 @@ trino-cli:  ## Connect to Trino via CLI
 psql:  ## Open psql connected to PostgreSQL
 	$(COMPOSE) exec postgresql psql -U postgres
 
+# ─── Validation deployment (Oracle Cloud Always Free) ───────────────────────────
+.PHONY: validate-up
+validate-up:  ## Deploy full stack on a single ARM64 node (Oracle Cloud Always Free)
+	@echo "$(BOLD)$(GREEN)▶  Deploying validation stack on k3s...$(RESET)"
+	k3s kubectl create namespace lakehouse-system 2>/dev/null || true
+	helm install lakehouse ./helm/charts/lakehouse-core \
+		--namespace lakehouse-system \
+		--values helm/charts/lakehouse-core/values.yaml \
+		--values helm/charts/lakehouse-core/values.validation.yaml \
+		--timeout 10m --wait
+	@echo "$(GREEN)✓  Validation stack deployed.$(RESET)"
+
+.PHONY: validate-test
+validate-test:  ## Run unit + integration tests against the validation stack
+	@echo "$(BOLD)Running unit + integration tests...$(RESET)"
+	python -m pytest tests/unit/ tests/integration/ -v \
+		--timeout=120 \
+		--ignore=tests/performance/
+
+.PHONY: validate-e2e
+validate-e2e:  ## Run e2e tests against the validation stack (excludes DR tests)
+	@echo "$(BOLD)Running e2e tests...$(RESET)"
+	python -m pytest tests/e2e/ -v \
+		--timeout=300 \
+		--ignore=tests/e2e/test_disaster_recovery.py
+
+.PHONY: validate-dr
+validate-dr:  ## Run disaster-recovery e2e tests (long-running, opt-in)
+	@echo "$(BOLD)Running DR tests...$(RESET)"
+	python -m pytest tests/e2e/test_disaster_recovery.py -v --run-dr
+
+.PHONY: validate-all
+validate-all: validate-test validate-e2e  ## Run all validation test suites (unit + integration + e2e)
+
 # ─── help ─────────────────────────────────────────────────────────────────────
 .PHONY: help
 help:  ## Show this help message

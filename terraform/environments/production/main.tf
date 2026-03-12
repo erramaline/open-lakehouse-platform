@@ -57,30 +57,30 @@ locals {
 
 # ── Réseau ────────────────────────────────────────────────────────────────────
 module "networking" {
-  source         = "../../modules/networking"
-  cloud_provider = var.cloud_provider
-  cluster_name   = var.cluster_name
-  vpc_cidr       = var.vpc_cidr
+  source                = "../../modules/networking"
+  cloud_provider        = var.cloud_provider
+  cluster_name          = var.cluster_name
+  vpc_cidr              = var.vpc_cidr
   availability_zones    = var.availability_zones
   private_subnet_cidrs  = var.private_subnet_cidrs
   public_subnet_cidrs   = var.public_subnet_cidrs
-  high_availability_nat = true  # HA en production : NAT GW par AZ
+  high_availability_nat = true # HA en production : NAT GW par AZ
   tags                  = local.common_tags
 }
 
 # ── Cluster Kubernetes ────────────────────────────────────────────────────────
 module "kubernetes_cluster" {
-  source               = "../../modules/kubernetes-cluster"
-  cloud_provider       = var.cloud_provider
-  cluster_name         = var.cluster_name
-  kubernetes_version   = var.kubernetes_version
-  vpc_cidr             = var.vpc_cidr
+  source             = "../../modules/kubernetes-cluster"
+  cloud_provider     = var.cloud_provider
+  cluster_name       = var.cluster_name
+  kubernetes_version = var.kubernetes_version
+  vpc_cidr           = var.vpc_cidr
   # Production : nœuds data haute capacité
-  data_node_instance_type    = "r5.4xlarge"
-  data_nodes_min             = 3
-  data_nodes_max             = 15
-  data_nodes_desired         = 5
-  data_node_disk_gb          = 500
+  data_node_instance_type = "r5.4xlarge"
+  data_nodes_min          = 3
+  data_nodes_max          = 15
+  data_nodes_desired      = 5
+  data_node_disk_gb       = 500
   # Stockage MinIO haute densité (NVMe)
   storage_node_instance_type = "i3en.2xlarge"
   storage_nodes_min          = 4

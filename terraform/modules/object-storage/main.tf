@@ -1,10 +1,10 @@
 terraform {
   required_version = ">= 1.6"
   required_providers {
-    aws = { source = "hashicorp/aws", version = ">= 5.0" }
-    google = { source = "hashicorp/google", version = ">= 5.0" }
+    aws     = { source = "hashicorp/aws", version = ">= 5.0" }
+    google  = { source = "hashicorp/google", version = ">= 5.0" }
     azurerm = { source = "hashicorp/azurerm", version = ">= 3.80" }
-    random = { source = "hashicorp/random", version = ">= 3.5" }
+    random  = { source = "hashicorp/random", version = ">= 3.5" }
   }
 }
 
@@ -112,13 +112,13 @@ resource "google_storage_bucket" "lakehouse" {
 
 # ── Azure Blob ────────────────────────────────────────────────────────────────
 resource "azurerm_storage_account" "lakehouse" {
-  count                    = var.cloud_provider == "azure" ? 1 : 0
-  name                     = replace(var.bucket_name, "-", "")
-  resource_group_name      = var.azure_resource_group
-  location                 = var.azure_location
-  account_tier             = "Standard"
-  account_replication_type = "ZRS"
-  min_tls_version          = "TLS1_2"
+  count                           = var.cloud_provider == "azure" ? 1 : 0
+  name                            = replace(var.bucket_name, "-", "")
+  resource_group_name             = var.azure_resource_group
+  location                        = var.azure_location
+  account_tier                    = "Standard"
+  account_replication_type        = "ZRS"
+  min_tls_version                 = "TLS1_2"
   https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
 

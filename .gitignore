@@ -1,6 +1,5 @@
-# Terraform — never commit provider binaries, state or local overrides
-**/.terraform/providers/
-**/.terraform/plugins/
+# Terraform — never commit provider binaries, state, local overrides or plugin cache
+**/.terraform/
 *.tfstate
 *.tfstate.backup
 *.tfvars

@@ -11,9 +11,9 @@ output "bucket_endpoint" {
   description = "Endpoint d'accès au stockage objet"
   value = var.cloud_provider == "aws" ? (
     "https://${try(aws_s3_bucket.lakehouse[0].bucket_regional_domain_name, "")}"
-  ) : var.cloud_provider == "gcp" ? (
+    ) : var.cloud_provider == "gcp" ? (
     "https://storage.googleapis.com/${try(google_storage_bucket.lakehouse[0].name, "")}"
-  ) : (
+    ) : (
     try(azurerm_storage_account.lakehouse[0].primary_blob_endpoint, "")
   )
 }

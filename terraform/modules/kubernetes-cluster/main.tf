@@ -26,8 +26,8 @@ terraform {
 
 # ── AWS EKS ──────────────────────────────────────────────────────────────────
 module "eks" {
-  count  = var.cloud_provider == "aws" ? 1 : 0
-  source = "terraform-aws-modules/eks/aws"
+  count   = var.cloud_provider == "aws" ? 1 : 0
+  source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
 
   cluster_name    = var.cluster_name
@@ -42,9 +42,9 @@ module "eks" {
   enable_cluster_creator_admin_permissions = true
 
   cluster_addons = {
-    coredns    = { most_recent = true }
-    kube-proxy = { most_recent = true }
-    vpc-cni    = { most_recent = true }
+    coredns            = { most_recent = true }
+    kube-proxy         = { most_recent = true }
+    vpc-cni            = { most_recent = true }
     aws-ebs-csi-driver = { most_recent = true }
   }
 
@@ -85,7 +85,7 @@ module "eks" {
       desired_size   = var.storage_nodes_desired
       disk_size      = var.storage_node_disk_gb
       labels = {
-        role = "storage"
+        role                          = "storage"
         "topology.kubernetes.io/zone" = data.aws_availability_zones.available[0].names[0]
       }
     }

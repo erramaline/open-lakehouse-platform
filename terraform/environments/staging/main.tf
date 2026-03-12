@@ -57,30 +57,30 @@ locals {
 
 # ── Réseau ────────────────────────────────────────────────────────────────────
 module "networking" {
-  source         = "../../modules/networking"
-  cloud_provider = var.cloud_provider
-  cluster_name   = var.cluster_name
-  vpc_cidr       = var.vpc_cidr
+  source                = "../../modules/networking"
+  cloud_provider        = var.cloud_provider
+  cluster_name          = var.cluster_name
+  vpc_cidr              = var.vpc_cidr
   availability_zones    = var.availability_zones
   private_subnet_cidrs  = var.private_subnet_cidrs
   public_subnet_cidrs   = var.public_subnet_cidrs
-  high_availability_nat = false  # staging : un seul NAT GW
+  high_availability_nat = false # staging : un seul NAT GW
   tags                  = local.common_tags
 }
 
 # ── Cluster Kubernetes ────────────────────────────────────────────────────────
 module "kubernetes_cluster" {
-  source               = "../../modules/kubernetes-cluster"
-  cloud_provider       = var.cloud_provider
-  cluster_name         = var.cluster_name
-  kubernetes_version   = var.kubernetes_version
-  vpc_cidr             = var.vpc_cidr
+  source             = "../../modules/kubernetes-cluster"
+  cloud_provider     = var.cloud_provider
+  cluster_name       = var.cluster_name
+  kubernetes_version = var.kubernetes_version
+  vpc_cidr           = var.vpc_cidr
   # Staging : nœuds data plus petits
-  data_node_instance_type    = "r5.xlarge"
-  data_nodes_min             = 1
-  data_nodes_max             = 5
-  data_nodes_desired         = 2
-  data_node_disk_gb          = 100
+  data_node_instance_type = "r5.xlarge"
+  data_nodes_min          = 1
+  data_nodes_max          = 5
+  data_nodes_desired      = 2
+  data_node_disk_gb       = 100
   # Stockage MinIO réduit en staging
   storage_node_instance_type = "i3.xlarge"
   storage_nodes_min          = 1
@@ -93,31 +93,31 @@ module "kubernetes_cluster" {
 
 # ── Stockage objet ────────────────────────────────────────────────────────────
 module "object_storage" {
-  source                   = "../../modules/object-storage"
-  cloud_provider           = var.cloud_provider
-  bucket_name              = "${var.cluster_name}-lakehouse-staging"
-  aws_kms_key_id           = var.kms_key_id
-  s3_ia_transition_days    = 30
+  source                     = "../../modules/object-storage"
+  cloud_provider             = var.cloud_provider
+  bucket_name                = "${var.cluster_name}-lakehouse-staging"
+  aws_kms_key_id             = var.kms_key_id
+  s3_ia_transition_days      = 30
   s3_glacier_transition_days = 90
-  tags                     = local.common_tags
+  tags                       = local.common_tags
 }
 
 # ── PostgreSQL ────────────────────────────────────────────────────────────────
 module "postgresql" {
-  source              = "../../modules/postgresql"
-  cloud_provider      = var.cloud_provider
-  identifier          = "${var.cluster_name}-pg-staging"
-  postgres_version    = "16"
-  instance_class      = "db.r6g.large"
-  storage_gb          = 100
-  max_storage_gb      = 500
-  multi_az            = false  # pas de HA en staging
+  source                = "../../modules/postgresql"
+  cloud_provider        = var.cloud_provider
+  identifier            = "${var.cluster_name}-pg-staging"
+  postgres_version      = "16"
+  instance_class        = "db.r6g.large"
+  storage_gb            = 100
+  max_storage_gb        = 500
+  multi_az              = false # pas de HA en staging
   backup_retention_days = 7
-  deletion_protection = false  # staging peut être supprimé
-  subnet_ids          = module.networking.private_subnet_ids
-  aws_kms_key_arn     = var.kms_key_arn
-  manage_password     = true
-  tags                = local.common_tags
+  deletion_protection   = false # staging peut être supprimé
+  subnet_ids            = module.networking.private_subnet_ids
+  aws_kms_key_arn       = var.kms_key_arn
+  manage_password       = true
+  tags                  = local.common_tags
 }
 
 # ── Helm: lakehouse-core ──────────────────────────────────────────────────────

@@ -27,9 +27,9 @@ output "kubeconfig_command" {
   description = "Commande pour récupérer le kubeconfig"
   value = var.cloud_provider == "aws" ? (
     "aws eks update-kubeconfig --region ${try(module.eks[0].cluster_region, "")} --name ${var.cluster_name}"
-  ) : var.cloud_provider == "gcp" ? (
+    ) : var.cloud_provider == "gcp" ? (
     "gcloud container clusters get-credentials ${var.cluster_name} --region ${var.gcp_region} --project ${var.gcp_project}"
-  ) : (
+    ) : (
     "az aks get-credentials --resource-group ${var.azure_resource_group} --name ${var.cluster_name}"
   )
 }

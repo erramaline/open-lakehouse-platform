@@ -14,6 +14,9 @@ permissions:
 env:
   HELM_VERSION: "3.14.0"
   TERRAFORM_VERSION: "1.7.0"
+  # Opt into Node.js 24 for all JavaScript actions (avoids Node 20 deprecation
+  # warnings from actions/checkout, azure/setup-helm, hashicorp/setup-terraform)
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   lint:

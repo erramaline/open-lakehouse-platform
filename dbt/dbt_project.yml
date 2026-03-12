@@ -1,0 +1,55 @@
+name: lakehouse
+version: "1.0.0"
+config-version: 2
+
+profile: lakehouse
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Global model configuration
+models:
+  lakehouse:
+    # Staging models: lightweight views over raw sources
+    staging:
+      +materialized: view
+      +schema: staging
+      +tags: ["staging"]
+
+    # Mart models: persisted tables for BI / analytics
+    marts:
+      +schema: marts
+      +tags: ["marts"]
+      core:
+        +materialized: table
+        +tags: ["core"]
+      reporting:
+        +materialized: table
+        +tags: ["reporting"]
+
+# Source freshness configuration
+sources:
+  lakehouse:
+    +schema: raw
+
+# Snapshot configuration (SCD2)
+snapshots:
+  lakehouse:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+vars:
+  # Configurable lookback for incremental models
+  incremental_lookback_days: 3
+  # Default date for backfill runs
+  backfill_start_date: "2024-01-01"

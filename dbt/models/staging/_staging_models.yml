@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Cleaned and typed customer records from raw source"
+    columns:
+      - name: customer_id
+        description: "Natural key from CRM (trimmed)"
+        tests:
+          - not_null
+          - unique
+      - name: email
+        description: "Normalised lowercase email (PII — masked by Ranger)"
+        tests:
+          - not_null
+      - name: first_name
+        tests:
+          - not_null
+      - name: last_name
+        tests:
+          - not_null
+      - name: full_name
+        description: "Concatenated first_name || ' ' || last_name"
+        tests:
+          - not_null
+      - name: country
+        tests:
+          - not_null
+      - name: created_at
+        description: "Parsed TIMESTAMP from source string"
+        tests:
+          - not_null
+      - name: _ingested_at
+        tests:
+          - not_null
+
+  - name: stg_orders
+    description: "Cleaned and typed order records from raw source"
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+      - name: order_date
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["pending", "processing", "completed", "cancelled", "refunded"]
+      - name: total_amount_usd
+        description: "Amount normalised to USD (passthrough for MVP)"
+        tests:
+          - not_null
+      - name: is_completed
+        description: "Boolean flag true if status = 'completed'"
+        tests:
+          - not_null
+      - name: _ingested_at
+        tests:
+          - not_null
+
+  - name: stg_products
+    description: "Cleaned product catalog records"
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+      - name: name
+        tests:
+          - not_null
+      - name: category
+        tests:
+          - not_null
+      - name: price
+        tests:
+          - not_null
+      - name: _ingested_at
+        tests:
+          - not_null

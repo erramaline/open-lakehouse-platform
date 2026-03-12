@@ -1,0 +1,36 @@
+lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none
+      host: "{{ env_var('TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
+      user: "{{ env_var('TRINO_USER', 'admin') }}"
+      database: iceberg
+      schema: "{{ env_var('DBT_SCHEMA', 'staging') }}"
+      threads: 4
+      http_scheme: http
+
+    staging:
+      type: trino
+      method: none
+      host: "{{ env_var('TRINO_HOST', 'trino') }}"
+      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
+      user: "{{ env_var('TRINO_USER', 'admin') }}"
+      database: iceberg
+      schema: "{{ env_var('DBT_SCHEMA', 'staging') }}"
+      threads: 4
+      http_scheme: http
+
+    production:
+      type: trino
+      method: BasicAuthentication
+      host: "{{ env_var('TRINO_HOST') }}"
+      port: "{{ env_var('TRINO_PORT', '443') | int }}"
+      user: "{{ env_var('TRINO_USER') }}"
+      password: "{{ env_var('TRINO_PASSWORD') }}"
+      database: iceberg
+      schema: "{{ env_var('DBT_SCHEMA', 'marts') }}"
+      threads: 8
+      http_scheme: https

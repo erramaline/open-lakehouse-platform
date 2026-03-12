@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: >
+      Customer dimension table with surrogate key.
+      Ready for SCD Type 2 extension (dbt snapshot).
+    columns:
+      - name: customer_key
+        description: "Surrogate key — MD5 hash of customer_id"
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Natural key from CRM"
+        tests:
+          - not_null
+          - unique
+      - name: email
+        description: "Normalised email (PII — Ranger column mask applied)"
+        tests:
+          - not_null
+      - name: first_name
+        tests:
+          - not_null
+      - name: last_name
+        tests:
+          - not_null
+      - name: full_name
+        tests:
+          - not_null
+      - name: country
+        tests:
+          - not_null
+      - name: created_at
+        tests:
+          - not_null
+      - name: _dbt_updated_at
+        description: "Timestamp of last dbt run that wrote this row"
+        tests:
+          - not_null
+
+  - name: fct_orders
+    description: >
+      Order fact table joined with the customer dimension.
+      Incremental on order_date using the updated_at watermark.
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: customer_key
+        description: "FK to dim_customers.customer_key"
+        tests:
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: order_date
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["pending", "processing", "completed", "cancelled", "refunded"]
+      - name: total_amount_usd
+        tests:
+          - not_null
+      - name: is_completed
+        tests:
+          - not_null
+      - name: country
+        description: "Denormalized from dim_customers"
+
+  - name: rpt_revenue_by_region
+    description: "Aggregated revenue by country for BI dashboards"
+    columns:
+      - name: country
+        tests:
+          - not_null
+          - unique
+      - name: total_orders
+        tests:
+          - not_null
+      - name: completed_orders
+        tests:
+          - not_null
+      - name: total_revenue_usd
+        tests:
+          - not_null
+      - name: completion_rate
+        description: "completed_orders / total_orders"
+        tests:
+          - not_null

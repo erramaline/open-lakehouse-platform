@@ -149,15 +149,77 @@ Every component, configuration, and change in this repository must satisfy:
 
 ## Quick Start
 
-> ⚠️ **Not yet available.** Infrastructure code is implemented in a subsequent phase. See [PLAN.md](PLAN.md) for the implementation sequence.
+### Prerequisites
+
+- Docker ≥ 24 and Docker Compose v2
+- 16 GB RAM minimum (32 GB recommended for the full stack)
+- 50 GB free disk space
+
+### 1. Clone & configure
 
 ```bash
-# Coming in Phase 1 (Weeks 3–4 per PLAN.md)
-git clone https://github.com/erramaline/open-lakehouse-platform.git
+git clone https://github.com/your-org/open-lakehouse-platform.git
 cd open-lakehouse-platform
-# cp infra/local/.env.example infra/local/.env
-# docker compose -f infra/local/docker-compose.yml up -d
+cp local/.env.example local/.env   # edit passwords and TLS settings
 ```
+
+### 2. Start the stack
+
+```bash
+make dev-up          # bootstraps all 15 services (~5 minutes first run)
+```
+
+This runs the bootstrap scripts in order:
+`00-init-tls.sh` → `01-init-openbao.sh` → `02-init-keycloak.sh` → `03-init-minio.sh` → `04-init-polaris.sh` → `05-init-ranger.sh` → `06-init-openmetadata.sh`
+
+### 3. Seed sample data
+
+```bash
+make seed            # loads TPC-H sf0.01 into the Iceberg raw layer
+```
+
+### 4. Run tests
+
+```bash
+make test-unit       # ~30 s — no running services required
+make test            # integration + e2e (requires make dev-up)
+```
+
+### 5. Access the UIs
+
+| Service | URL | Default credentials |
+|---|---|---|
+| Trino | <http://localhost:8080> | `admin` / *(none)* |
+| MinIO Console | <http://localhost:9001> | `minioadmin` / `minioadmin` |
+| Keycloak | <http://localhost:9080> | `admin` / `admin` |
+| Airflow | <http://localhost:8888> | `admin` / `admin` |
+| Grafana | <http://localhost:3000> | `admin` / `admin` |
+| OpenMetadata | <http://localhost:8585> | `admin@open-metadata.org` / `admin` |
+| Apache Ranger | <http://localhost:6080> | `admin` / `admin` |
+| Nessie | <http://localhost:19120> | *(no auth)* |
+| Polaris | <http://localhost:8181> | OAuth2 — see `04-init-polaris.sh` |
+| Prometheus | <http://localhost:9090> | *(no auth)* |
+| Alertmanager | <http://localhost:9093> | *(no auth)* |
+
+> **Security note:** Default credentials are for local development only.  
+> The bootstrap scripts rotate them for non-local environments.
+
+### Make targets reference
+
+| Target | Description |
+|---|---|
+| `make dev-up` | Start all Docker Compose services and run bootstrap scripts |
+| `make dev-down` | Stop all services (preserve volumes) |
+| `make seed` | Load TPC-H sf0.01 sample data |
+| `make test-unit` | pytest tests/unit/ (no services needed) |
+| `make test-integration` | pytest tests/integration/ (requires dev-up) |
+| `make test-e2e` | pytest tests/e2e/ (requires dev-up + seed) |
+| `make test-performance` | Locust + benchmark suite |
+| `make test` | All tests |
+| `make lint` | ruff + black + yamllint + shellcheck |
+| `make dbt-run` | dbt deps + run staging + marts + tests |
+| `make helm-lint` | Lint all Helm charts |
+| `make tf-validate` | Validate all Terraform modules |
 
 ---
 

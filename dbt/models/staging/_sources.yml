@@ -1,0 +1,109 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw Iceberg tables ingested from MinIO via Airflow"
+    schema: raw
+    database: iceberg
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 24, period: hour}
+    loaded_at_field: _ingested_at
+
+    tables:
+      - name: customers
+        description: "Raw customer records from source CRM"
+        loaded_at_field: _ingested_at
+        columns:
+          - name: customer_id
+            description: "Natural key from source system"
+            tests:
+              - not_null
+              - unique
+          - name: email
+            description: "Customer email address (PII)"
+            tests:
+              - not_null
+          - name: first_name
+            tests:
+              - not_null
+          - name: last_name
+            tests:
+              - not_null
+          - name: country
+            tests:
+              - not_null
+          - name: created_at
+            tests:
+              - not_null
+          - name: _ingested_at
+            description: "Ingestion timestamp added by Airflow"
+            tests:
+              - not_null
+
+      - name: orders
+        description: "Raw order records from source OMS"
+        loaded_at_field: _ingested_at
+        columns:
+          - name: order_id
+            tests:
+              - not_null
+              - unique
+          - name: customer_id
+            tests:
+              - not_null
+          - name: order_date
+            tests:
+              - not_null
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ["pending", "processing", "completed", "cancelled", "refunded"]
+          - name: total_amount
+            tests:
+              - not_null
+          - name: currency
+            tests:
+              - accepted_values:
+                  values: ["USD", "EUR", "GBP", "JPY", "CAD", "AUD"]
+          - name: _ingested_at
+            tests:
+              - not_null
+
+      - name: products
+        description: "Raw product catalog"
+        loaded_at_field: _ingested_at
+        columns:
+          - name: product_id
+            tests:
+              - not_null
+              - unique
+          - name: name
+            tests:
+              - not_null
+          - name: category
+            tests:
+              - not_null
+          - name: price
+            tests:
+              - not_null
+          - name: _ingested_at
+            tests:
+              - not_null
+
+      - name: documents
+        description: "Extracted document content ingested via Docling"
+        columns:
+          - name: run_id
+            tests:
+              - not_null
+          - name: source_key
+            tests:
+              - not_null
+          - name: extracted_text
+            tests:
+              - not_null
+          - name: _ingested_at
+            tests:
+              - not_null

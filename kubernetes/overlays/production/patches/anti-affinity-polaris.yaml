@@ -1,0 +1,21 @@
+---
+# Pod anti-affinity for polaris StatefulSet — spread across nodes in production
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: polaris
+  namespace: lakehouse-data
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values: ["polaris"]
+                topologyKey: kubernetes.io/hostname

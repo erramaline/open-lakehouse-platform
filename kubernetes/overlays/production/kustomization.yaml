@@ -37,17 +37,34 @@ patches:
     target:
       kind: StatefulSet
       name: keycloak
-  - path: patches/anti-affinity.yaml
+  - path: patches/anti-affinity-openbao.yaml
     target:
-      group: apps
-      version: v1
       kind: StatefulSet
-  - path: patches/anti-affinity-deploy.yaml
+      name: openbao
+  - path: patches/anti-affinity-minio.yaml
     target:
-      group: apps
-      version: v1
+      kind: StatefulSet
+      name: minio
+  - path: patches/anti-affinity-keycloak.yaml
+    target:
+      kind: StatefulSet
+      name: keycloak
+  - path: patches/anti-affinity-polaris.yaml
+    target:
+      kind: StatefulSet
+      name: polaris
+  - path: patches/anti-affinity-trino-coordinator.yaml
+    target:
       kind: Deployment
+      name: trino-coordinator
+  - path: patches/anti-affinity-trino-worker.yaml
+    target:
+      kind: Deployment
+      name: trino-worker
   - path: patches/topology-spread.yaml
+    target:
+      kind: ConfigMap
+      name: topology-spread-policy
 
 configMapGenerator:
   - name: environment-config

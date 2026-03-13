@@ -6,8 +6,6 @@ kind: Kustomization
 resources:
   - ../../base
 
-namespace: lakehouse-data
-
 labels:
   - pairs:
       environment: staging
@@ -43,12 +41,18 @@ patches:
     target:
       kind: StatefulSet
       name: minio
-  - path: patches/airflow-replicas.yaml
+  - path: patches/airflow-webserver-replicas.yaml
     target:
-      group: apps
-      version: v1
       kind: Deployment
-      labelSelector: "app.kubernetes.io/name=airflow"
+      name: airflow-webserver
+  - path: patches/airflow-scheduler-replicas.yaml
+    target:
+      kind: Deployment
+      name: airflow-scheduler
+  - path: patches/airflow-worker-replicas.yaml
+    target:
+      kind: Deployment
+      name: airflow-worker
   - path: patches/resource-limits-staging.yaml
     target:
       kind: ResourceQuota

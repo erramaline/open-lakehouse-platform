@@ -1,0 +1,9 @@
+---
+# Airflow scheduler in staging: 1 replica
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: lakehouse-ingest
+spec:
+  replicas: 1

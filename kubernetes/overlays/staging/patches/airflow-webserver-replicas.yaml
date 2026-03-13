@@ -1,0 +1,9 @@
+---
+# Airflow webserver in staging: 1 replica
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: lakehouse-ingest
+spec:
+  replicas: 1

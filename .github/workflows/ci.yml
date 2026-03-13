@@ -57,10 +57,11 @@ jobs:
           tflint --init
           tflint --recursive --format compact
 
-      - name: Validate Kubernetes manifests (kustomize build)
+      - name: Kustomize build validation
         run: |
           kubectl version --client
-          kustomize build kubernetes/overlays/staging | kubectl apply --dry-run=client -f -
+          kustomize build kubernetes/overlays/staging > /dev/null
+          kustomize build kubernetes/overlays/production > /dev/null
         env:
           KUBECONFIG: /dev/null
 

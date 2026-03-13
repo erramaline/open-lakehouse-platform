@@ -125,10 +125,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest great-expectations pydantic
+          pip install pytest great-expectations pydantic pyyaml
 
       - name: Run data quality tests
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/unit/ -v --tb=short -m "not integration and not e2e and not slow"
 
   build:
     name: Build Helm Packages

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo-data-lakehouse.png" alt="Open Lakehouse Platform" width="300"/>
+</p>
+
 # Open Lakehouse Platform
 
 > **100% open source · Zero hardcoded credentials · mTLS everywhere · GDPR · SOC2 · HIPAA-ready**

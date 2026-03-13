@@ -8,6 +8,7 @@ description: |
 type: application
 version: 1.0.0
 appVersion: "2026.3"
+icon: https://raw.githubusercontent.com/erramaline/open-lakehouse-platform/main/docs/assets/logo-data-lakehouse.png
 
 keywords:
   - lakehouse
